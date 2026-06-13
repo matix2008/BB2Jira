@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using BB2Jira.Cli;
 using BB2Jira.Services;
 using Microsoft.Extensions.Logging;
