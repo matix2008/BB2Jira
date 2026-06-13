@@ -69,4 +69,36 @@ public class CliOptionsTests
 
         Assert.Contains(options.Errors, e => e.Contains("--unknown"));
     }
+
+    [Fact]
+    public void WhenMapModeWithoutInputThenInputDefaultsToDbExport()
+    {
+        var options = CliOptions.Parse(new[] { "-m" });
+
+        Assert.Equal("db-2.0.json", options.InputPath);
+    }
+
+    [Fact]
+    public void WhenCsvModeWithoutInputThenInputDefaultsToDbExport()
+    {
+        var options = CliOptions.Parse(new[] { "-c" });
+
+        Assert.Equal("db-2.0.json", options.InputPath);
+    }
+
+    [Fact]
+    public void WhenCsvModeWithoutMapThenMapDefaultsToMapJson()
+    {
+        var options = CliOptions.Parse(new[] { "-c" });
+
+        Assert.Equal("map.json", options.MapPath);
+    }
+
+    [Fact]
+    public void WhenCsvModeWithoutOutputThenOutputDefaultsToImportCsv()
+    {
+        var options = CliOptions.Parse(new[] { "-c" });
+
+        Assert.Equal("import.csv", options.OutputPath);
+    }
 }
