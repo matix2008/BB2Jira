@@ -3,14 +3,14 @@ using System.Text.Json.Serialization;
 namespace BB2Jira.Models.Bitbucket;
 
 /// <summary>
-/// Запись истории изменений задачи (элемент logs[]).
+/// Issue change-history entry (an element of logs[]).
 /// </summary>
 public sealed class BitbucketLog
 {
     [JsonPropertyName("id")]
     public int Id { get; set; }
 
-    /// <summary>Идентификатор задачи, к которой относится запись истории.</summary>
+    /// <summary>Identifier of the issue the history entry belongs to.</summary>
     [JsonPropertyName("issue")]
     public int Issue { get; set; }
 

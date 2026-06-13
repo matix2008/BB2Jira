@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace BB2Jira.Models.Bitbucket;
 
 /// <summary>
-/// Пользователь Bitbucket (reporter, assignee, автор комментария или записи истории).
+/// Bitbucket user (reporter, assignee, comment author, or history entry author).
 /// </summary>
 public sealed class BitbucketUser
 {
@@ -20,7 +20,7 @@ public sealed class BitbucketUser
     public string? Uuid { get; set; }
 
     /// <summary>
-    /// Ключ пользователя в порядке приоритета: account_id, затем display_name.
+    /// User key in priority order: account_id, then display_name.
     /// </summary>
     public string? Key
     {

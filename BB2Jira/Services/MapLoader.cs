@@ -3,12 +3,12 @@ using BB2Jira.Models.Mapping;
 
 namespace BB2Jira.Services;
 
-/// <summary>Загрузка существующего файла маппинга map.json.</summary>
+/// <summary>Loads an existing map.json mapping file.</summary>
 public static class MapLoader
 {
     /// <summary>
-    /// Читает map.json. Если файл отсутствует, возвращает пустую модель
-    /// (это допустимо при первой генерации).
+    /// Reads map.json. If the file is missing, returns an empty model
+    /// (acceptable on the first generation).
     /// </summary>
     public static MapFile Load(string path)
     {
@@ -21,7 +21,7 @@ public static class MapLoader
         return Parse(json);
     }
 
-    /// <summary>Десериализует содержимое map.json из строки.</summary>
+    /// <summary>Deserializes map.json content from a string.</summary>
     public static MapFile Parse(string json)
     {
         if (string.IsNullOrWhiteSpace(json))

@@ -3,14 +3,14 @@ using BB2Jira.Models.Bitbucket;
 
 namespace BB2Jira.Services;
 
-/// <summary>Загрузка и десериализация файла экспорта Bitbucket (db-2.0.json).</summary>
+/// <summary>Loads and deserializes the Bitbucket export file (db-2.0.json).</summary>
 public static class BitbucketLoader
 {
     /// <summary>
-    /// Читает db-2.0.json по указанному пути.
+    /// Reads db-2.0.json from the specified path.
     /// </summary>
-    /// <exception cref="FileNotFoundException">Файл не найден.</exception>
-    /// <exception cref="InvalidDataException">Файл не удалось разобрать как JSON.</exception>
+    /// <exception cref="FileNotFoundException">The file was not found.</exception>
+    /// <exception cref="InvalidDataException">The file could not be parsed as JSON.</exception>
     public static BitbucketExport Load(string path)
     {
         if (!File.Exists(path))
@@ -22,7 +22,7 @@ public static class BitbucketLoader
         return Parse(json);
     }
 
-    /// <summary>Десериализует содержимое db-2.0.json из строки.</summary>
+    /// <summary>Deserializes db-2.0.json content from a string.</summary>
     public static BitbucketExport Parse(string json)
     {
         try

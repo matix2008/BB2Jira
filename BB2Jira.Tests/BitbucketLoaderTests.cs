@@ -3,6 +3,7 @@ using Xunit;
 
 namespace BB2Jira.Tests;
 
+/// <summary>Tests for db-2.0.json parsing in <see cref="BitbucketLoader"/>.</summary>
 public class BitbucketLoaderTests
 {
     [Fact]

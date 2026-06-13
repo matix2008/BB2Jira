@@ -4,10 +4,10 @@ using System.Text.Json.Serialization;
 
 namespace BB2Jira.Services;
 
-/// <summary>Общие настройки сериализации/десериализации JSON.</summary>
+/// <summary>Shared JSON serialization/deserialization settings.</summary>
 public static class JsonDefaults
 {
-    /// <summary>Настройки для чтения db-2.0.json и map.json.</summary>
+    /// <summary>Settings for reading db-2.0.json and map.json.</summary>
     public static JsonSerializerOptions Read { get; } = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -15,7 +15,7 @@ public static class JsonDefaults
         AllowTrailingCommas = true,
     };
 
-    /// <summary>Настройки для записи map.json (с отступами, без экранирования кириллицы).</summary>
+    /// <summary>Settings for writing map.json (indented, without escaping Cyrillic).</summary>
     public static JsonSerializerOptions Write { get; } = new()
     {
         WriteIndented = true,

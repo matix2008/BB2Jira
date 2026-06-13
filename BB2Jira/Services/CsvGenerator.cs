@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 
 namespace BB2Jira.Services;
 
-/// <summary>Генерация файла импорта import.csv (ключ -c).</summary>
+/// <summary>Generates the import.csv import file (-c key).</summary>
 public static class CsvGenerator
 {
     private const string DateFormat = "yyyy-MM-dd HH:mm:ss";
@@ -18,8 +18,8 @@ public static class CsvGenerator
     };
 
     /// <summary>
-    /// Формирует import.csv на основе экспорта Bitbucket и маппинга и сохраняет его по указанному пути.
-    /// Итоговая статистика и проблемы записываются в <paramref name="logger"/>.
+    /// Builds import.csv from the Bitbucket export and the mapping and saves it to the specified path.
+    /// Final statistics and issues are written to <paramref name="logger"/>.
     /// </summary>
     public static void Generate(BitbucketExport export, MapFile map, string outputPath, ILogger logger)
     {
@@ -33,7 +33,7 @@ public static class CsvGenerator
     }
 
     /// <summary>
-    /// Строит содержимое import.csv. Публичный метод для модульного тестирования.
+    /// Builds the import.csv content. Public method for unit testing.
     /// </summary>
     public static CsvWriter BuildCsv(BitbucketExport export, MapFile map, ILogger logger)
     {
@@ -96,7 +96,7 @@ public static class CsvGenerator
         return writer;
     }
 
-    /// <summary>Summary = issues.title, либо "Bitbucket issue {id}" для пустого заголовка.</summary>
+    /// <summary>Summary = issues.title, or "Bitbucket issue {id}" for an empty title.</summary>
     public static string BuildSummary(BitbucketIssue issue)
     {
         ArgumentNullException.ThrowIfNull(issue);
@@ -105,7 +105,7 @@ public static class CsvGenerator
             : issue.Title;
     }
 
-    /// <summary>Description = issues.content + служебный блок импорта.</summary>
+    /// <summary>Description = issues.content + import service block.</summary>
     public static string BuildDescription(BitbucketIssue issue)
     {
         ArgumentNullException.ThrowIfNull(issue);
@@ -149,7 +149,7 @@ public static class CsvGenerator
             return false;
         }
 
-        // В CSV включаются только задачи, у которых kind маппится в Task или Bug.
+        // Only issues whose kind maps to Task or Bug are included in the CSV.
         if (!mapped.Equals("Task", StringComparison.OrdinalIgnoreCase) &&
             !mapped.Equals("Bug", StringComparison.OrdinalIgnoreCase))
         {
@@ -208,7 +208,7 @@ public static class CsvGenerator
 
     private static string ResolveAssignee(BitbucketIssue issue, MapFile map)
     {
-        // Assignee может отсутствовать или быть не сопоставлен — поле просто остаётся пустым.
+        // Assignee may be absent or unmapped -- the field simply stays empty.
         return TryResolveUser(issue.Assignee, map, out var jiraUser, out _) ? jiraUser : string.Empty;
     }
 

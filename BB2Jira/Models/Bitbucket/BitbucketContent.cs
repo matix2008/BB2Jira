@@ -4,9 +4,9 @@ using System.Text.Json.Serialization;
 namespace BB2Jira.Models.Bitbucket;
 
 /// <summary>
-/// Bitbucket рендерит текстовые поля (content) как объект { raw, markup, html }.
-/// В некоторых экспортах поле может быть простой строкой или null, поэтому
-/// используется кастомный конвертер <see cref="BitbucketContentConverter"/>.
+/// Bitbucket renders text fields (content) as an object { raw, markup, html }.
+/// In some exports the field may be a plain string or null, so a custom
+/// converter <see cref="BitbucketContentConverter"/> is used.
 /// </summary>
 [JsonConverter(typeof(BitbucketContentConverter))]
 public sealed class BitbucketContent
@@ -17,14 +17,14 @@ public sealed class BitbucketContent
 
     public string? Html { get; set; }
 
-    /// <summary>Текстовое значение поля (приоритет: raw, затем html).</summary>
+    /// <summary>Text value of the field (priority: raw, then html).</summary>
     public string Text => Raw ?? Html ?? string.Empty;
 
     public override string ToString() => Text;
 }
 
 /// <summary>
-/// Поддерживает чтение content как объекта { raw, markup, html }, простой строки или null.
+/// Supports reading content as an object { raw, markup, html }, a plain string, or null.
 /// </summary>
 public sealed class BitbucketContentConverter : JsonConverter<BitbucketContent?>
 {

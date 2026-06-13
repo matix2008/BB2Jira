@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace BB2Jira.Models.Mapping;
 
 /// <summary>
-/// Сопоставление пользователя Bitbucket с пользователем Jira (значение map.users[key]).
+/// Mapping of a Bitbucket user to a Jira user (the map.users[key] value).
 /// </summary>
 public sealed class UserMapping
 {
@@ -20,8 +20,8 @@ public sealed class UserMapping
     public string JiraDisplayName { get; set; } = string.Empty;
 
     /// <summary>
-    /// Возвращает идентификатор пользователя Jira: jiraAccountId, при его отсутствии — jiraEmail.
-    /// Пустая строка означает, что пользователь не сопоставлен.
+    /// Returns the Jira user identifier: jiraAccountId, or jiraEmail when it is absent.
+    /// An empty string means the user is not mapped.
     /// </summary>
     public string ResolveJiraUser()
     {

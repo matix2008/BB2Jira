@@ -1,8 +1,8 @@
 namespace BB2Jira.Models.Mapping;
 
 /// <summary>
-/// Дефолтные значения маппинга и значения по умолчанию для неизвестных ключей
-/// согласно правилам формирования map.json.
+/// Default mapping values and fallback values for unknown keys
+/// according to the map.json generation rules.
 /// </summary>
 public static class MapDefaults
 {

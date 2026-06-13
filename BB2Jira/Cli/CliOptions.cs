@@ -1,24 +1,24 @@
 namespace BB2Jira.Cli;
 
-/// <summary>Режим работы утилиты.</summary>
+/// <summary>Utility operation mode.</summary>
 public enum AppMode
 {
-    /// <summary>Режим не определён (нет ключей -m или -c).</summary>
+    /// <summary>Mode is not defined (no -m or -c keys).</summary>
     None,
 
-    /// <summary>Генерация map.json (ключ -m без -c).</summary>
+    /// <summary>Generate map.json (-m key without -c).</summary>
     GenerateMap,
 
-    /// <summary>Генерация import.csv (ключ -c).</summary>
+    /// <summary>Generate import.csv (-c key).</summary>
     GenerateCsv,
 }
 
 /// <summary>
-/// Разбор аргументов командной строки.
+/// Parses command-line arguments.
 ///
-/// Ключ -m многозначен:
-///   * без -c       — режим генерации map.json;
-///   * вместе с -c  — путь к существующему map.json.
+/// The -m key is overloaded:
+///   * without -c  -- map.json generation mode;
+///   * together with -c  -- path to an existing map.json.
 /// </summary>
 public sealed class CliOptions
 {
@@ -28,13 +28,13 @@ public sealed class CliOptions
 
     public AppMode Mode { get; private set; } = AppMode.None;
 
-    /// <summary>Путь к файлу экспорта Bitbucket (-i).</summary>
+    /// <summary>Path to the Bitbucket export file (-i).</summary>
     public string InputPath { get; private set; } = DefaultInputPath;
 
-    /// <summary>Путь к файлу маппинга map.json (-m). Источник в CSV-режиме, результат в map-режиме.</summary>
+    /// <summary>Path to the map.json mapping file (-m). Source in CSV mode, result in map mode.</summary>
     public string MapPath { get; private set; } = DefaultMapPath;
 
-    /// <summary>Путь к результату (-o): import.csv в CSV-режиме, map.json в map-режиме.</summary>
+    /// <summary>Path to the result (-o): import.csv in CSV mode, map.json in map mode.</summary>
     public string OutputPath { get; private set; } = DefaultCsvPath;
 
     public IReadOnlyList<string> Errors => _errors;
@@ -98,7 +98,7 @@ public sealed class CliOptions
 
                 case "-h":
                 case "--help":
-                    // Справку обрабатывает вызывающий код; режим оставляем None.
+                    // Help is handled by the caller; the mode stays None.
                     break;
 
                 default:
@@ -107,7 +107,7 @@ public sealed class CliOptions
             }
         }
 
-        // -m без -c означает режим генерации map.json.
+        // -m without -c means map.json generation mode.
         if (options.Mode != AppMode.GenerateCsv && mapKeyPresent)
         {
             options.Mode = AppMode.GenerateMap;
@@ -122,7 +122,7 @@ public sealed class CliOptions
         switch (options.Mode)
         {
             case AppMode.GenerateMap:
-                // В map-режиме результат — это map.json. Если -o не задан, используем путь из -m.
+                // In map mode the result is map.json. If -o is not set, use the path from -m.
                 if (!outputExplicit)
                 {
                     options.OutputPath = options.MapPath;

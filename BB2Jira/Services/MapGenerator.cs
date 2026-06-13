@@ -6,13 +6,13 @@ using Microsoft.Extensions.Logging;
 
 namespace BB2Jira.Services;
 
-/// <summary>Генерация и слияние файла маппинга map.json (ключ -m).</summary>
+/// <summary>Generates and merges the map.json mapping file (-m key).</summary>
 public static class MapGenerator
 {
     /// <summary>
-    /// Формирует map.json на основе экспорта Bitbucket и сохраняет его по указанному пути.
-    /// Если файл уже существует, ручные правки сохраняются (новые значения добавляются,
-    /// существующие не затираются и не удаляются).
+    /// Builds map.json from the Bitbucket export and saves it to the specified path.
+    /// If the file already exists, manual edits are preserved (new values are added,
+    /// existing ones are not overwritten or removed).
     /// </summary>
     public static void Generate(BitbucketExport export, string outputPath, ILogger logger)
     {
@@ -42,7 +42,7 @@ public static class MapGenerator
     }
 
     /// <summary>
-    /// Строит модель map.json, объединяя дефолтные значения, данные экспорта и существующий маппинг.
+    /// Builds the map.json model by combining default values, export data, and the existing mapping.
     /// </summary>
     public static MapFile Build(BitbucketExport export, MapFile existing)
     {
@@ -68,7 +68,7 @@ public static class MapGenerator
             map.Kind[kind] = ResolveValue(existing.Kind, kind, MapDefaults.Kind, MapDefaults.DefaultKind);
         }
 
-        // Сохраняем значения из существующего файла, даже если они больше не встречаются.
+        // Keep values from the existing file even if they no longer occur.
         MergeExisting(existing.Kind, map.Kind);
     }
 
@@ -112,7 +112,7 @@ public static class MapGenerator
 
             if (existing.Users.TryGetValue(key, out var existingUser))
             {
-                // Сохраняем ручные правки; обновляем только производное имя из Bitbucket.
+                // Keep manual edits; only update the display name derived from Bitbucket.
                 existingUser.BitbucketDisplayName = displayName;
                 if (string.IsNullOrWhiteSpace(existingUser.JiraDisplayName))
                 {
@@ -137,7 +137,7 @@ public static class MapGenerator
             };
         }
 
-        // Не удаляем пользователей, добавленных вручную в существующий файл.
+        // Do not remove users added manually to the existing file.
         foreach (var pair in existing.Users)
         {
             map.Users.TryAdd(pair.Key, pair.Value);
@@ -175,8 +175,8 @@ public static class MapGenerator
     }
 
     /// <summary>
-    /// Определяет значение для ключа: приоритет у существующего (ручного) маппинга,
-    /// затем дефолтный словарь, затем дефолтное значение для неизвестного ключа.
+    /// Resolves the value for a key: the existing (manual) mapping takes priority,
+    /// then the default dictionary, then the fallback value for an unknown key.
     /// </summary>
     private static string ResolveValue(
         IReadOnlyDictionary<string, string> existing,
@@ -192,7 +192,7 @@ public static class MapGenerator
         return defaults.TryGetValue(key, out var preset) ? preset : fallback;
     }
 
-    /// <summary>Добавляет в результат значения из существующего файла, которых ещё нет (без перезаписи).</summary>
+    /// <summary>Adds values from the existing file that are not yet present (without overwriting).</summary>
     private static void MergeExisting(
         IDictionary<string, string> existing,
         IDictionary<string, string> target)

@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace BB2Jira.Models.Bitbucket;
 
 /// <summary>
-/// Запись справочника milestones[] и значение issues[].milestone.
+/// Entry of the milestones[] reference and the issues[].milestone value.
 /// </summary>
 public sealed class BitbucketMilestone
 {

@@ -7,6 +7,7 @@ using Xunit;
 
 namespace BB2Jira.Tests;
 
+/// <summary>Tests for import.csv generation in <see cref="CsvGenerator"/>.</summary>
 public class CsvGeneratorTests
 {
     private static ILogger NewLogger() => NullLogger.Instance;
@@ -90,7 +91,7 @@ public class CsvGeneratorTests
         var csv = CsvGenerator.BuildCsv(export, MapWithKind(("proposal", "Epic")), NewLogger()).ToString();
         var lines = csv.Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
 
-        Assert.Single(lines); // только заголовок
+        Assert.Single(lines); // header only
     }
 
     [Fact]

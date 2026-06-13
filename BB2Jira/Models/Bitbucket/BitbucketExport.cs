@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace BB2Jira.Models.Bitbucket;
 
 /// <summary>
-/// Корневой объект файла экспорта Bitbucket (db-2.0.json).
+/// Root object of the Bitbucket export file (db-2.0.json).
 /// </summary>
 public sealed class BitbucketExport
 {

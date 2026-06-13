@@ -3,14 +3,14 @@ using System.Text.Json.Serialization;
 namespace BB2Jira.Models.Bitbucket;
 
 /// <summary>
-/// Комментарий к задаче (элемент comments[]).
+/// Comment on an issue (an element of comments[]).
 /// </summary>
 public sealed class BitbucketComment
 {
     [JsonPropertyName("id")]
     public int Id { get; set; }
 
-    /// <summary>Идентификатор задачи, к которой относится комментарий.</summary>
+    /// <summary>Identifier of the issue the comment belongs to.</summary>
     [JsonPropertyName("issue")]
     public int Issue { get; set; }
 

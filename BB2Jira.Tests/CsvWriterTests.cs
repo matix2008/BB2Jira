@@ -3,6 +3,7 @@ using Xunit;
 
 namespace BB2Jira.Tests;
 
+/// <summary>Tests for CSV escaping and row writing in <see cref="CsvWriter"/>.</summary>
 public class CsvWriterTests
 {
     [Fact]

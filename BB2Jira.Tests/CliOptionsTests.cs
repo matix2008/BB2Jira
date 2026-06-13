@@ -3,6 +3,7 @@ using Xunit;
 
 namespace BB2Jira.Tests;
 
+/// <summary>Tests for command-line argument parsing in <see cref="CliOptions"/>.</summary>
 public class CliOptionsTests
 {
     [Fact]

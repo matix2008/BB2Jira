@@ -1,5 +1,4 @@
-﻿// See https://aka.ms/new-console-template for more information
-using BB2Jira.Cli;
+﻿using BB2Jira.Cli;
 using BB2Jira.Services;
 using Microsoft.Extensions.Logging;
 using Serilog;
@@ -81,7 +80,7 @@ static int RunGenerateCsv(CliOptions options)
     }
 }
 
-// Создаёт фабрику логгеров Serilog с выводом в консоль и в файл лога (import.log / map.log).
+// Creates a Serilog logger factory that writes to the console and to the log file (import.log / map.log).
 static ILoggerFactory CreateLoggerFactory(string logPath)
 {
     var serilogLogger = new LoggerConfiguration()

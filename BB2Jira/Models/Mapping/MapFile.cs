@@ -3,8 +3,8 @@ using System.Text.Json.Serialization;
 namespace BB2Jira.Models.Mapping;
 
 /// <summary>
-/// Модель файла маппинга map.json.
-/// Порядок свойств соответствует формату из readme: kind, status, priority, users, milestone, version.
+/// Model of the map.json mapping file.
+/// Property order matches the format from readme: kind, status, priority, users, milestone, version.
 /// </summary>
 public sealed class MapFile
 {

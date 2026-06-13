@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace BB2Jira.Models.Bitbucket;
 
 /// <summary>
-/// Задача Bitbucket (элемент issues[]).
+/// Bitbucket issue (an element of issues[]).
 /// </summary>
 public sealed class BitbucketIssue
 {

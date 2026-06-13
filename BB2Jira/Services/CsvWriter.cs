@@ -3,16 +3,16 @@ using System.Text;
 namespace BB2Jira.Services;
 
 /// <summary>
-/// «апись CSV по стандартным правилам экранировани€ (RFC 4180):
-/// значение берЄтс€ в кавычки, если содержит разделитель, кавычку или перевод строки;
-/// внутренние кавычки удваиваютс€. –азделитель Ч зап€та€.
+/// Writes CSV using the standard escaping rules (RFC 4180):
+/// a value is quoted if it contains the delimiter, a quote, or a line break;
+/// inner quotes are doubled. The delimiter is a comma.
 /// </summary>
 public sealed class CsvWriter
 {
     private const char Delimiter = ',';
     private readonly StringBuilder _builder = new();
 
-    /// <summary>ƒобавл€ет строку CSV из набора полей.</summary>
+    /// <summary>Appends a CSV row from a set of fields.</summary>
     public void WriteRow(IEnumerable<string?> fields)
     {
         ArgumentNullException.ThrowIfNull(fields);
@@ -32,10 +32,10 @@ public sealed class CsvWriter
         _builder.Append("\r\n");
     }
 
-    /// <summary>¬озвращает накопленный CSV-текст.</summary>
+    /// <summary>Returns the accumulated CSV text.</summary>
     public override string ToString() => _builder.ToString();
 
-    /// <summary>—охран€ет CSV в файл в кодировке utf-8-sig (UTF-8 с BOM).</summary>
+    /// <summary>Saves the CSV to a file in utf-8-sig encoding (UTF-8 with BOM).</summary>
     public void Save(string path)
     {
         var directory = Path.GetDirectoryName(Path.GetFullPath(path));
@@ -47,7 +47,7 @@ public sealed class CsvWriter
         File.WriteAllText(path, _builder.ToString(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
     }
 
-    /// <summary>Ёкранирует одно значение по правилам CSV.</summary>
+    /// <summary>Escapes a single value according to CSV rules.</summary>
     public static string Escape(string? value)
     {
         if (string.IsNullOrEmpty(value))

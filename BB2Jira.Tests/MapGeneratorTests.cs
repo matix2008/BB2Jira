@@ -5,9 +5,9 @@ using Xunit;
 
 namespace BB2Jira.Tests;
 
+/// <summary>Tests for map.json generation and merge logic in <see cref="MapGenerator"/>.</summary>
 public class MapGeneratorTests
 {
-
     [Fact]
     public void WhenKnownKindThenDefaultMappingIsUsed()
     {
