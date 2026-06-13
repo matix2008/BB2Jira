@@ -1,4 +1,3 @@
-using BB2Jira.Logging;
 using BB2Jira.Models.Bitbucket;
 using BB2Jira.Models.Mapping;
 using BB2Jira.Services;
@@ -8,7 +7,6 @@ namespace BB2Jira.Tests;
 
 public class MapGeneratorTests
 {
-    private static AppLogger NewLogger() => new(echoToConsole: false);
 
     [Fact]
     public void WhenKnownKindThenDefaultMappingIsUsed()
@@ -18,7 +16,7 @@ public class MapGeneratorTests
             Issues = { new BitbucketIssue { Id = 1, Kind = "bug" } },
         };
 
-        var map = MapGenerator.Build(export, new MapFile(), NewLogger());
+        var map = MapGenerator.Build(export, new MapFile());
 
         Assert.Equal("Bug", map.Kind["bug"]);
     }
@@ -31,7 +29,7 @@ public class MapGeneratorTests
             Issues = { new BitbucketIssue { Id = 1, Kind = "epic" } },
         };
 
-        var map = MapGenerator.Build(export, new MapFile(), NewLogger());
+        var map = MapGenerator.Build(export, new MapFile());
 
         Assert.Equal("Task", map.Kind["epic"]);
     }
@@ -44,7 +42,7 @@ public class MapGeneratorTests
             Issues = { new BitbucketIssue { Id = 1, Status = "frozen" } },
         };
 
-        var map = MapGenerator.Build(export, new MapFile(), NewLogger());
+        var map = MapGenerator.Build(export, new MapFile());
 
         Assert.Equal("Backlog", map.Status["frozen"]);
     }
@@ -57,7 +55,7 @@ public class MapGeneratorTests
             Issues = { new BitbucketIssue { Id = 1, Priority = "urgent" } },
         };
 
-        var map = MapGenerator.Build(export, new MapFile(), NewLogger());
+        var map = MapGenerator.Build(export, new MapFile());
 
         Assert.Equal("Medium", map.Priority["urgent"]);
     }
@@ -77,7 +75,7 @@ public class MapGeneratorTests
             },
         };
 
-        var map = MapGenerator.Build(export, new MapFile(), NewLogger());
+        var map = MapGenerator.Build(export, new MapFile());
 
         Assert.True(map.Users.ContainsKey("557058:abc"));
     }
@@ -97,7 +95,7 @@ public class MapGeneratorTests
             },
         };
 
-        var map = MapGenerator.Build(export, new MapFile(), NewLogger());
+        var map = MapGenerator.Build(export, new MapFile());
 
         Assert.True(map.Users.ContainsKey("Petr Petrov"));
     }
@@ -113,7 +111,7 @@ public class MapGeneratorTests
             },
         };
 
-        var map = MapGenerator.Build(export, new MapFile(), NewLogger());
+        var map = MapGenerator.Build(export, new MapFile());
 
         Assert.Equal("Anna", map.Users["id1"].JiraDisplayName);
     }
@@ -126,7 +124,7 @@ public class MapGeneratorTests
             Milestones = { new BitbucketMilestone { Name = "MVP-1" } },
         };
 
-        var map = MapGenerator.Build(export, new MapFile(), NewLogger());
+        var map = MapGenerator.Build(export, new MapFile());
 
         Assert.Equal("MVP-1", map.Milestone["MVP-1"]);
     }
@@ -142,7 +140,7 @@ public class MapGeneratorTests
             },
         };
 
-        var map = MapGenerator.Build(export, new MapFile(), NewLogger());
+        var map = MapGenerator.Build(export, new MapFile());
 
         Assert.Equal("1.1", map.Version["1.1"]);
     }
@@ -157,7 +155,7 @@ public class MapGeneratorTests
         var existing = new MapFile();
         existing.Status["open"] = "Custom Status";
 
-        var map = MapGenerator.Build(export, existing, NewLogger());
+        var map = MapGenerator.Build(export, existing);
 
         Assert.Equal("Custom Status", map.Status["open"]);
     }
@@ -169,7 +167,7 @@ public class MapGeneratorTests
         var existing = new MapFile();
         existing.Kind["legacy"] = "Task";
 
-        var map = MapGenerator.Build(export, existing, NewLogger());
+        var map = MapGenerator.Build(export, existing);
 
         Assert.Equal("Task", map.Kind["legacy"]);
     }
@@ -192,7 +190,7 @@ public class MapGeneratorTests
             JiraDisplayName = "Anna",
         };
 
-        var map = MapGenerator.Build(export, existing, NewLogger());
+        var map = MapGenerator.Build(export, existing);
 
         Assert.Equal("jira-123", map.Users["id1"].JiraAccountId);
     }
@@ -205,7 +203,7 @@ public class MapGeneratorTests
             Issues = { new BitbucketIssue { Id = 1, Kind = "  " } },
         };
 
-        var map = MapGenerator.Build(export, new MapFile(), NewLogger());
+        var map = MapGenerator.Build(export, new MapFile());
 
         Assert.Empty(map.Kind);
     }

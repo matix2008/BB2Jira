@@ -1,7 +1,8 @@
 ﻿// See https://aka.ms/new-console-template for more information
 using BB2Jira.Cli;
-using BB2Jira.Logging;
 using BB2Jira.Services;
+using Microsoft.Extensions.Logging;
+using Serilog;
 
 if (args.Length == 0 || args.Contains("-h") || args.Contains("--help"))
 {
@@ -32,60 +33,62 @@ return options.Mode switch
 
 static int RunGenerateMap(CliOptions options)
 {
-    var logPath = Path.ChangeExtension(options.OutputPath, ".log");
-    var logger = new AppLogger();
-    logger.Info("Режим: генерация map.json");
-    logger.Info($"Входной файл: {options.InputPath}");
-    logger.Info($"Файл маппинга: {options.OutputPath}");
+    using var loggerFactory = CreateLoggerFactory(Path.ChangeExtension(options.OutputPath, ".log"));
+    var logger = loggerFactory.CreateLogger("BB2Jira");
+
+    logger.LogInformation("Режим: генерация map.json");
+    logger.LogInformation("Входной файл: {InputPath}", options.InputPath);
+    logger.LogInformation("Файл маппинга: {MapPath}", options.OutputPath);
 
     try
     {
         var export = BitbucketLoader.Load(options.InputPath);
-        logger.Info($"Загружено issues: {export.Issues.Count}");
+        logger.LogInformation("Загружено issues: {IssueCount}", export.Issues.Count);
 
         MapGenerator.Generate(export, options.OutputPath, logger);
-
-        logger.Info($"Готово. Предупреждений: {logger.WarningCount}, ошибок: {logger.ErrorCount}");
         return 0;
     }
     catch (Exception ex) when (ex is FileNotFoundException or InvalidDataException)
     {
-        logger.Error(ex.Message);
+        logger.LogError("{Message}", ex.Message);
         return 1;
-    }
-    finally
-    {
-        logger.Save(logPath);
     }
 }
 
 static int RunGenerateCsv(CliOptions options)
 {
-    var logPath = Path.ChangeExtension(options.OutputPath, ".log");
-    var logger = new AppLogger();
-    logger.Info("Режим: генерация import.csv");
-    logger.Info($"Входной файл: {options.InputPath}");
-    logger.Info($"Файл маппинга: {options.MapPath}");
-    logger.Info($"Результат: {options.OutputPath}");
+    using var loggerFactory = CreateLoggerFactory(Path.ChangeExtension(options.OutputPath, ".log"));
+    var logger = loggerFactory.CreateLogger("BB2Jira");
+
+    logger.LogInformation("Режим: генерация import.csv");
+    logger.LogInformation("Входной файл: {InputPath}", options.InputPath);
+    logger.LogInformation("Файл маппинга: {MapPath}", options.MapPath);
+    logger.LogInformation("Результат: {OutputPath}", options.OutputPath);
 
     try
     {
         var export = BitbucketLoader.Load(options.InputPath);
-        logger.Info($"Загружено issues: {export.Issues.Count}");
+        logger.LogInformation("Загружено issues: {IssueCount}", export.Issues.Count);
 
         var map = MapLoader.Load(options.MapPath);
         CsvGenerator.Generate(export, map, options.OutputPath, logger);
-
-        logger.Info($"Готово. Предупреждений: {logger.WarningCount}, ошибок: {logger.ErrorCount}");
         return 0;
     }
     catch (Exception ex) when (ex is FileNotFoundException or InvalidDataException)
     {
-        logger.Error(ex.Message);
+        logger.LogError("{Message}", ex.Message);
         return 1;
     }
-    finally
-    {
-        logger.Save(logPath);
-    }
+}
+
+// Создаёт фабрику логгеров Serilog с выводом в консоль и в файл лога (import.log / map.log).
+static ILoggerFactory CreateLoggerFactory(string logPath)
+{
+    var serilogLogger = new LoggerConfiguration()
+        .MinimumLevel.Information()
+        .WriteTo.Console(outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
+        .WriteTo.File(logPath, outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
+        .CreateLogger();
+
+    return LoggerFactory.Create(builder => builder.AddSerilog(serilogLogger, dispose: true));
 }

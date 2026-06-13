@@ -1,8 +1,7 @@
-using BB2Jira.Logging;
 using System.Globalization;
-using BB2Jira.Logging;
 using BB2Jira.Models.Bitbucket;
 using BB2Jira.Models.Mapping;
+using Microsoft.Extensions.Logging;
 
 namespace BB2Jira.Services;
 
@@ -22,7 +21,7 @@ public static class CsvGenerator
     /// ‘ормирует import.csv на основе экспорта Bitbucket и маппинга и сохран€ет его по указанному пути.
     /// »тогова€ статистика и проблемы записываютс€ в <paramref name="logger"/>.
     /// </summary>
-    public static void Generate(BitbucketExport export, MapFile map, string outputPath, AppLogger logger)
+    public static void Generate(BitbucketExport export, MapFile map, string outputPath, ILogger logger)
     {
         ArgumentNullException.ThrowIfNull(export);
         ArgumentNullException.ThrowIfNull(map);
@@ -30,13 +29,13 @@ public static class CsvGenerator
 
         var writer = BuildCsv(export, map, logger);
         writer.Save(outputPath);
-        logger.Info($"import.csv сохранЄн: {outputPath}");
+        logger.LogInformation("import.csv сохранЄн: {OutputPath}", outputPath);
     }
 
     /// <summary>
     /// —троит содержимое import.csv. ѕубличный метод дл€ модульного тестировани€.
     /// </summary>
-    public static CsvWriter BuildCsv(BitbucketExport export, MapFile map, AppLogger logger)
+    public static CsvWriter BuildCsv(BitbucketExport export, MapFile map, ILogger logger)
     {
         ArgumentNullException.ThrowIfNull(export);
         ArgumentNullException.ThrowIfNull(map);
@@ -135,7 +134,7 @@ public static class CsvGenerator
     private static bool TryResolveIssueType(
         BitbucketIssue issue,
         MapFile map,
-        AppLogger logger,
+        ILogger logger,
         GenerationStats stats,
         out string issueType)
     {
@@ -146,7 +145,7 @@ public static class CsvGenerator
         {
             stats.MissingMapValues.Add($"kind: '{kind}'");
             stats.EmptyRequiredFields++;
-            logger.Warning($"Issue {issue.Id}: kind '{kind}' отсутствует в map.json Ч задача пропущена.");
+            logger.LogWarning("Issue {IssueId}: kind '{Kind}' отсутствует в map.json Ч задача пропущена.", issue.Id, kind);
             return false;
         }
 
@@ -154,7 +153,7 @@ public static class CsvGenerator
         if (!mapped.Equals("Task", StringComparison.OrdinalIgnoreCase) &&
             !mapped.Equals("Bug", StringComparison.OrdinalIgnoreCase))
         {
-            logger.Info($"Issue {issue.Id}: тип '{mapped}' не Task/Bug Ч задача пропущена.");
+            logger.LogInformation("Issue {IssueId}: тип '{IssueType}' не Task/Bug Ч задача пропущена.", issue.Id, mapped);
             return false;
         }
 
@@ -162,7 +161,7 @@ public static class CsvGenerator
         return true;
     }
 
-    private static string ResolveStatus(BitbucketIssue issue, MapFile map, AppLogger logger, GenerationStats stats)
+    private static string ResolveStatus(BitbucketIssue issue, MapFile map, ILogger logger, GenerationStats stats)
     {
         var status = issue.Status?.Trim();
         if (!string.IsNullOrWhiteSpace(status) && map.Status.TryGetValue(status, out var mapped) && !string.IsNullOrWhiteSpace(mapped))
@@ -172,11 +171,11 @@ public static class CsvGenerator
 
         stats.MissingMapValues.Add($"status: '{status}'");
         stats.EmptyRequiredFields++;
-        logger.Warning($"Issue {issue.Id}: status '{status}' отсутствует в map.json Ч поле Status пустое.");
+        logger.LogWarning("Issue {IssueId}: status '{Status}' отсутствует в map.json Ч поле Status пустое.", issue.Id, status);
         return string.Empty;
     }
 
-    private static string ResolvePriority(BitbucketIssue issue, MapFile map, AppLogger logger, GenerationStats stats)
+    private static string ResolvePriority(BitbucketIssue issue, MapFile map, ILogger logger, GenerationStats stats)
     {
         var priority = issue.Priority?.Trim();
         if (string.IsNullOrWhiteSpace(priority))
@@ -190,11 +189,11 @@ public static class CsvGenerator
         }
 
         stats.MissingMapValues.Add($"priority: '{priority}'");
-        logger.Warning($"Issue {issue.Id}: priority '{priority}' отсутствует в map.json Ч используетс€ {MapDefaults.DefaultPriority}.");
+        logger.LogWarning("Issue {IssueId}: priority '{Priority}' отсутствует в map.json Ч используетс€ {Default}.", issue.Id, priority, MapDefaults.DefaultPriority);
         return MapDefaults.DefaultPriority;
     }
 
-    private static string ResolveReporter(BitbucketIssue issue, MapFile map, AppLogger logger, GenerationStats stats)
+    private static string ResolveReporter(BitbucketIssue issue, MapFile map, ILogger logger, GenerationStats stats)
     {
         if (TryResolveUser(issue.Reporter, map, out var jiraUser, out var displayName))
         {
@@ -203,7 +202,7 @@ public static class CsvGenerator
 
         stats.UnmappedUsers.Add(displayName);
         stats.EmptyRequiredFields++;
-        logger.Warning($"Issue {issue.Id}: reporter '{displayName}' не сопоставлен Ч поле Reporter пустое.");
+        logger.LogWarning("Issue {IssueId}: reporter '{Reporter}' не сопоставлен Ч поле Reporter пустое.", issue.Id, displayName);
         return string.Empty;
     }
 
@@ -216,7 +215,7 @@ public static class CsvGenerator
     private static string ResolveUpdated(BitbucketIssue issue) =>
         issue.UpdatedOn is not null ? FormatDate(issue.UpdatedOn) : FormatDate(issue.CreatedOn);
 
-    private static string ResolveFixVersion(BitbucketIssue issue, MapFile map, AppLogger logger, GenerationStats stats)
+    private static string ResolveFixVersion(BitbucketIssue issue, MapFile map, ILogger logger, GenerationStats stats)
     {
         var version = issue.Version?.Name?.Trim();
         if (string.IsNullOrWhiteSpace(version))
@@ -230,11 +229,11 @@ public static class CsvGenerator
         }
 
         stats.MissingMapValues.Add($"version: '{version}'");
-        logger.Warning($"Issue {issue.Id}: version '{version}' отсутствует в map.json Ч поле Fix Version/s пустое.");
+        logger.LogWarning("Issue {IssueId}: version '{Version}' отсутствует в map.json Ч поле Fix Version/s пустое.", issue.Id, version);
         return string.Empty;
     }
 
-    private static string ResolveMilestone(BitbucketIssue issue, MapFile map, AppLogger logger, GenerationStats stats)
+    private static string ResolveMilestone(BitbucketIssue issue, MapFile map, ILogger logger, GenerationStats stats)
     {
         var milestone = issue.Milestone?.Name?.Trim();
         if (string.IsNullOrWhiteSpace(milestone))
@@ -248,7 +247,7 @@ public static class CsvGenerator
         }
 
         stats.MissingMapValues.Add($"milestone: '{milestone}'");
-        logger.Warning($"Issue {issue.Id}: milestone '{milestone}' отсутствует в map.json Ч поле Bitbucket Milestone пустое.");
+        logger.LogWarning("Issue {IssueId}: milestone '{Milestone}' отсутствует в map.json Ч поле Bitbucket Milestone пустое.", issue.Id, milestone);
         return string.Empty;
     }
 
@@ -342,35 +341,37 @@ public static class CsvGenerator
         }
     }
 
-    private static void WriteSummary(AppLogger logger, GenerationStats stats)
+    private static void WriteSummary(ILogger logger, GenerationStats stats)
     {
-        logger.Raw("----- »тоги генерации import.csv -----");
-        logger.Info($"ќбработано issues: {stats.ProcessedIssues}");
-        logger.Info($"Ёкспортировано строк: {stats.ExportedRows}");
-        logger.Info($" омментариев: {stats.Comments}");
-        logger.Info($"«аписей истории: {stats.History}");
-        logger.Info($"ѕустых об€зательных полей: {stats.EmptyRequiredFields}");
+        logger.LogInformation("----- »тоги генерации import.csv -----");
+        logger.LogInformation("ќбработано issues: {ProcessedIssues}", stats.ProcessedIssues);
+        logger.LogInformation("Ёкспортировано строк: {ExportedRows}", stats.ExportedRows);
+        logger.LogInformation(" омментариев: {Comments}", stats.Comments);
+        logger.LogInformation("«аписей истории: {History}", stats.History);
+        logger.LogInformation("ѕустых об€зательных полей: {EmptyRequiredFields}", stats.EmptyRequiredFields);
 
         if (stats.SkippedIssues.Count > 0)
         {
-            logger.Info($"ѕропущено задач: {stats.SkippedIssues.Count} (id: {string.Join(", ", stats.SkippedIssues)})");
+            logger.LogInformation(
+                "ѕропущено задач: {Count} (id: {Ids})",
+                stats.SkippedIssues.Count, string.Join(", ", stats.SkippedIssues));
         }
 
         if (stats.MissingMapValues.Count > 0)
         {
-            logger.Info($"«начени€, отсутствующие в map.json ({stats.MissingMapValues.Count}):");
+            logger.LogInformation("«начени€, отсутствующие в map.json ({Count}):", stats.MissingMapValues.Count);
             foreach (var value in stats.MissingMapValues.OrderBy(v => v, StringComparer.Ordinal))
             {
-                logger.Info($"  {value}");
+                logger.LogInformation("  {Value}", value);
             }
         }
 
         if (stats.UnmappedUsers.Count > 0)
         {
-            logger.Info($"ѕользователи без jiraAccountId/jiraEmail ({stats.UnmappedUsers.Count}):");
+            logger.LogInformation("ѕользователи без jiraAccountId/jiraEmail ({Count}):", stats.UnmappedUsers.Count);
             foreach (var user in stats.UnmappedUsers.OrderBy(v => v, StringComparer.Ordinal))
             {
-                logger.Info($"  {user}");
+                logger.LogInformation("  {User}", user);
             }
         }
     }

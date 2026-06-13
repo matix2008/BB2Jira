@@ -1,14 +1,15 @@
-using BB2Jira.Logging;
 using BB2Jira.Models.Bitbucket;
 using BB2Jira.Models.Mapping;
 using BB2Jira.Services;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace BB2Jira.Tests;
 
 public class CsvGeneratorTests
 {
-    private static AppLogger NewLogger() => new(echoToConsole: false);
+    private static ILogger NewLogger() => NullLogger.Instance;
 
     private static MapFile MapWithKind(params (string Key, string Value)[] kinds)
     {

@@ -1,8 +1,8 @@
 using System.Text;
 using System.Text.Json;
-using BB2Jira.Logging;
 using BB2Jira.Models.Bitbucket;
 using BB2Jira.Models.Mapping;
+using Microsoft.Extensions.Logging;
 
 namespace BB2Jira.Services;
 
@@ -14,7 +14,7 @@ public static class MapGenerator
     /// Если файл уже существует, ручные правки сохраняются (новые значения добавляются,
     /// существующие не затираются и не удаляются).
     /// </summary>
-    public static void Generate(BitbucketExport export, string outputPath, AppLogger logger)
+    public static void Generate(BitbucketExport export, string outputPath, ILogger logger)
     {
         ArgumentNullException.ThrowIfNull(export);
         ArgumentNullException.ThrowIfNull(logger);
@@ -22,10 +22,10 @@ public static class MapGenerator
         var existing = MapLoader.Load(outputPath);
         if (File.Exists(outputPath))
         {
-            logger.Info("Найден существующий map.json: ручные правки будут сохранены.");
+            logger.LogInformation("Найден существующий map.json: ручные правки будут сохранены.");
         }
 
-        var map = Build(export, existing, logger);
+        var map = Build(export, existing);
 
         var directory = Path.GetDirectoryName(Path.GetFullPath(outputPath));
         if (!string.IsNullOrEmpty(directory))
@@ -36,15 +36,15 @@ public static class MapGenerator
         var json = JsonSerializer.Serialize(map, JsonDefaults.Write);
         File.WriteAllText(outputPath, json, new UTF8Encoding(false));
 
-        logger.Info($"map.json сохранён: kind={map.Kind.Count}, status={map.Status.Count}, " +
-                    $"priority={map.Priority.Count}, users={map.Users.Count}, " +
-                    $"milestone={map.Milestone.Count}, version={map.Version.Count}");
+        logger.LogInformation(
+            "map.json сохранён: kind={Kind}, status={Status}, priority={Priority}, users={Users}, milestone={Milestone}, version={Version}",
+            map.Kind.Count, map.Status.Count, map.Priority.Count, map.Users.Count, map.Milestone.Count, map.Version.Count);
     }
 
     /// <summary>
     /// Строит модель map.json, объединяя дефолтные значения, данные экспорта и существующий маппинг.
     /// </summary>
-    public static MapFile Build(BitbucketExport export, MapFile existing, AppLogger logger)
+    public static MapFile Build(BitbucketExport export, MapFile existing)
     {
         ArgumentNullException.ThrowIfNull(export);
         ArgumentNullException.ThrowIfNull(existing);
