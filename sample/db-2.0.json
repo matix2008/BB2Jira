@@ -1,0 +1,74 @@
+{
+  "issues": [
+    {
+      "id": 1,
+      "title": "Login button does not work",
+      "content": { "raw": "Clicking login does nothing.", "markup": "markdown", "html": "<p>Clicking login does nothing.</p>" },
+      "kind": "bug",
+      "status": "open",
+      "priority": "critical",
+      "reporter": { "account_id": "557058:aaaa", "display_name": "Ivan Ivanov" },
+      "assignee": { "account_id": "557058:bbbb", "display_name": "Petr Petrov" },
+      "created_on": "2023-05-01T10:30:45.000000+00:00",
+      "updated_on": "2023-05-02T09:00:00.000000+00:00",
+      "milestone": { "id": 1, "name": "MVP-1" },
+      "version": { "id": 1, "name": "1.0" }
+    },
+    {
+      "id": 2,
+      "title": "Add dark mode",
+      "content": "Users want a dark theme.",
+      "kind": "enhancement",
+      "status": "new",
+      "priority": "minor",
+      "reporter": { "display_name": "Anna Smith" },
+      "created_on": "2023-05-03T08:00:00.000000+00:00",
+      "version": { "id": 2, "name": "1.1" }
+    },
+    {
+      "id": 3,
+      "title": "Spike: research caching",
+      "content": null,
+      "kind": "proposal",
+      "status": "new",
+      "priority": "trivial",
+      "reporter": { "account_id": "557058:aaaa", "display_name": "Ivan Ivanov" },
+      "created_on": "2023-05-04T08:00:00.000000+00:00"
+    }
+  ],
+  "comments": [
+    {
+      "id": 100,
+      "issue": 1,
+      "content": { "raw": "I can reproduce this on Chrome." },
+      "user": { "account_id": "557058:bbbb", "display_name": "Petr Petrov" },
+      "created_on": "2023-05-01T11:00:00.000000+00:00"
+    },
+    {
+      "id": 101,
+      "issue": 1,
+      "content": { "raw": "Fixed in latest build." },
+      "user": { "display_name": "External Contributor" },
+      "created_on": "2023-05-02T08:30:00.000000+00:00"
+    }
+  ],
+  "logs": [
+    {
+      "id": 200,
+      "issue": 1,
+      "user": { "account_id": "557058:aaaa", "display_name": "Ivan Ivanov" },
+      "field": "status",
+      "changed_from": "new",
+      "changed_to": "open",
+      "created_on": "2023-05-01T10:45:00.000000+00:00"
+    }
+  ],
+  "milestones": [
+    { "id": 1, "name": "MVP-1" },
+    { "id": 2, "name": "MVP-2" }
+  ],
+  "versions": [
+    { "id": 1, "name": "1.0" },
+    { "id": 2, "name": "1.1" }
+  ]
+}
