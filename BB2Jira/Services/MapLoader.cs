@@ -36,7 +36,7 @@ public static class MapLoader
         }
         catch (JsonException ex)
         {
-            throw new InvalidDataException($"Не удалось разобрать map.json: {ex.Message}", ex);
+            throw new InvalidDataException($"Failed to parse map.json: {ex.Message}", ex);
         }
     }
 }

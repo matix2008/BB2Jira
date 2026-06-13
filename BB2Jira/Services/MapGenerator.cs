@@ -22,7 +22,7 @@ public static class MapGenerator
         var existing = MapLoader.Load(outputPath);
         if (File.Exists(outputPath))
         {
-            logger.LogInformation("Найден существующий map.json: ручные правки будут сохранены.");
+            logger.LogInformation("Existing map.json found: manual edits will be preserved.");
         }
 
         var map = Build(export, existing);
@@ -37,7 +37,7 @@ public static class MapGenerator
         File.WriteAllText(outputPath, json, new UTF8Encoding(false));
 
         logger.LogInformation(
-            "map.json сохранён: kind={Kind}, status={Status}, priority={Priority}, users={Users}, milestone={Milestone}, version={Version}",
+            "map.json saved: kind={Kind}, status={Status}, priority={Priority}, users={Users}, milestone={Milestone}, version={Version}",
             map.Kind.Count, map.Status.Count, map.Priority.Count, map.Users.Count, map.Milestone.Count, map.Version.Count);
     }
 

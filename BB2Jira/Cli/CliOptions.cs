@@ -77,7 +77,7 @@ public sealed class CliOptions
                     }
                     else
                     {
-                        options._errors.Add("Ключ -i указан без значения (путь к db-2.0.json).");
+                        options._errors.Add("Key -i is specified without a value (path to db-2.0.json).");
                     }
 
                     break;
@@ -91,7 +91,7 @@ public sealed class CliOptions
                     }
                     else
                     {
-                        options._errors.Add("Ключ -o указан без значения (путь к результату).");
+                        options._errors.Add("Key -o is specified without a value (path to the result).");
                     }
 
                     break;
@@ -102,7 +102,7 @@ public sealed class CliOptions
                     break;
 
                 default:
-                    options._errors.Add($"Неизвестный аргумент: {arg}");
+                    options._errors.Add($"Unknown argument: {arg}");
                     break;
             }
         }
@@ -139,7 +139,7 @@ public sealed class CliOptions
                 break;
 
             case AppMode.None:
-                options._errors.Add("Не указан режим работы. Используйте -m (map.json) или -c (import.csv).");
+                options._errors.Add("No operation mode specified. Use -m (map.json) or -c (import.csv).");
                 break;
         }
     }
@@ -162,18 +162,18 @@ public sealed class CliOptions
 
     public static string GetUsage() =>
         """
-        BB2Jira — конвертер экспорта Bitbucket (db-2.0.json) в Jira.
+        BB2Jira -- converts a Bitbucket export (db-2.0.json) to Jira.
 
-        Использование:
+        Usage:
           BB2Jira -m [-i db-2.0.json] [-o map.json]
           BB2Jira -c -i db-2.0.json -m map.json -o import.csv
 
-        Ключи:
-          -m, --map     режим генерации map.json (без -c);
-                        путь к map.json (вместе с -c)
-          -c, --csv     режим генерации import.csv
-          -i, --input   путь к файлу экспорта Bitbucket (db-2.0.json)
-          -o, --output  путь к результату (map.json или import.csv)
-          -h, --help    показать справку
+        Keys:
+          -m, --map     generate map.json mode (without -c);
+                        path to map.json (together with -c)
+          -c, --csv     generate import.csv mode
+          -i, --input   path to the Bitbucket export file (db-2.0.json)
+          -o, --output  path to the result (map.json or import.csv)
+          -h, --help    show help
         """;
 }

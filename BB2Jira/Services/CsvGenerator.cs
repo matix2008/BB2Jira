@@ -29,7 +29,7 @@ public static class CsvGenerator
 
         var writer = BuildCsv(export, map, logger);
         writer.Save(outputPath);
-        logger.LogInformation("import.csv сохранЄн: {OutputPath}", outputPath);
+        logger.LogInformation("import.csv saved: {OutputPath}", outputPath);
     }
 
     /// <summary>
@@ -145,7 +145,7 @@ public static class CsvGenerator
         {
             stats.MissingMapValues.Add($"kind: '{kind}'");
             stats.EmptyRequiredFields++;
-            logger.LogWarning("Issue {IssueId}: kind '{Kind}' отсутствует в map.json Ч задача пропущена.", issue.Id, kind);
+            logger.LogWarning("Issue {IssueId}: kind '{Kind}' is missing in map.json -- issue skipped.", issue.Id, kind);
             return false;
         }
 
@@ -153,7 +153,7 @@ public static class CsvGenerator
         if (!mapped.Equals("Task", StringComparison.OrdinalIgnoreCase) &&
             !mapped.Equals("Bug", StringComparison.OrdinalIgnoreCase))
         {
-            logger.LogInformation("Issue {IssueId}: тип '{IssueType}' не Task/Bug Ч задача пропущена.", issue.Id, mapped);
+            logger.LogInformation("Issue {IssueId}: type '{IssueType}' is not Task/Bug -- issue skipped.", issue.Id, mapped);
             return false;
         }
 
@@ -171,7 +171,7 @@ public static class CsvGenerator
 
         stats.MissingMapValues.Add($"status: '{status}'");
         stats.EmptyRequiredFields++;
-        logger.LogWarning("Issue {IssueId}: status '{Status}' отсутствует в map.json Ч поле Status пустое.", issue.Id, status);
+        logger.LogWarning("Issue {IssueId}: status '{Status}' is missing in map.json -- Status field is empty.", issue.Id, status);
         return string.Empty;
     }
 
@@ -189,7 +189,7 @@ public static class CsvGenerator
         }
 
         stats.MissingMapValues.Add($"priority: '{priority}'");
-        logger.LogWarning("Issue {IssueId}: priority '{Priority}' отсутствует в map.json Ч используетс€ {Default}.", issue.Id, priority, MapDefaults.DefaultPriority);
+        logger.LogWarning("Issue {IssueId}: priority '{Priority}' is missing in map.json -- using {Default}.", issue.Id, priority, MapDefaults.DefaultPriority);
         return MapDefaults.DefaultPriority;
     }
 
@@ -202,7 +202,7 @@ public static class CsvGenerator
 
         stats.UnmappedUsers.Add(displayName);
         stats.EmptyRequiredFields++;
-        logger.LogWarning("Issue {IssueId}: reporter '{Reporter}' не сопоставлен Ч поле Reporter пустое.", issue.Id, displayName);
+        logger.LogWarning("Issue {IssueId}: reporter '{Reporter}' is not mapped -- Reporter field is empty.", issue.Id, displayName);
         return string.Empty;
     }
 
@@ -229,7 +229,7 @@ public static class CsvGenerator
         }
 
         stats.MissingMapValues.Add($"version: '{version}'");
-        logger.LogWarning("Issue {IssueId}: version '{Version}' отсутствует в map.json Ч поле Fix Version/s пустое.", issue.Id, version);
+        logger.LogWarning("Issue {IssueId}: version '{Version}' is missing in map.json -- Fix Version/s field is empty.", issue.Id, version);
         return string.Empty;
     }
 
@@ -247,7 +247,7 @@ public static class CsvGenerator
         }
 
         stats.MissingMapValues.Add($"milestone: '{milestone}'");
-        logger.LogWarning("Issue {IssueId}: milestone '{Milestone}' отсутствует в map.json Ч поле Bitbucket Milestone пустое.", issue.Id, milestone);
+        logger.LogWarning("Issue {IssueId}: milestone '{Milestone}' is missing in map.json -- Bitbucket Milestone field is empty.", issue.Id, milestone);
         return string.Empty;
     }
 
@@ -343,23 +343,23 @@ public static class CsvGenerator
 
     private static void WriteSummary(ILogger logger, GenerationStats stats)
     {
-        logger.LogInformation("----- »тоги генерации import.csv -----");
-        logger.LogInformation("ќбработано issues: {ProcessedIssues}", stats.ProcessedIssues);
-        logger.LogInformation("Ёкспортировано строк: {ExportedRows}", stats.ExportedRows);
-        logger.LogInformation(" омментариев: {Comments}", stats.Comments);
-        logger.LogInformation("«аписей истории: {History}", stats.History);
-        logger.LogInformation("ѕустых об€зательных полей: {EmptyRequiredFields}", stats.EmptyRequiredFields);
+        logger.LogInformation("----- import.csv generation summary -----");
+        logger.LogInformation("Processed issues: {ProcessedIssues}", stats.ProcessedIssues);
+        logger.LogInformation("Exported rows: {ExportedRows}", stats.ExportedRows);
+        logger.LogInformation("Comments: {Comments}", stats.Comments);
+        logger.LogInformation("History entries: {History}", stats.History);
+        logger.LogInformation("Empty required fields: {EmptyRequiredFields}", stats.EmptyRequiredFields);
 
         if (stats.SkippedIssues.Count > 0)
         {
             logger.LogInformation(
-                "ѕропущено задач: {Count} (id: {Ids})",
+                "Skipped issues: {Count} (id: {Ids})",
                 stats.SkippedIssues.Count, string.Join(", ", stats.SkippedIssues));
         }
 
         if (stats.MissingMapValues.Count > 0)
         {
-            logger.LogInformation("«начени€, отсутствующие в map.json ({Count}):", stats.MissingMapValues.Count);
+            logger.LogInformation("Values missing in map.json ({Count}):", stats.MissingMapValues.Count);
             foreach (var value in stats.MissingMapValues.OrderBy(v => v, StringComparer.Ordinal))
             {
                 logger.LogInformation("  {Value}", value);
@@ -368,7 +368,7 @@ public static class CsvGenerator
 
         if (stats.UnmappedUsers.Count > 0)
         {
-            logger.LogInformation("ѕользователи без jiraAccountId/jiraEmail ({Count}):", stats.UnmappedUsers.Count);
+            logger.LogInformation("Users without jiraAccountId/jiraEmail ({Count}):", stats.UnmappedUsers.Count);
             foreach (var user in stats.UnmappedUsers.OrderBy(v => v, StringComparer.Ordinal))
             {
                 logger.LogInformation("  {User}", user);

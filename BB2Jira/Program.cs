@@ -15,7 +15,7 @@ if (!options.IsValid)
 {
     foreach (var error in options.Errors)
     {
-        Console.Error.WriteLine($"Ошибка: {error}");
+        Console.Error.WriteLine($"Error: {error}");
     }
 
     Console.Error.WriteLine();
@@ -35,14 +35,14 @@ static int RunGenerateMap(CliOptions options)
     using var loggerFactory = CreateLoggerFactory(Path.ChangeExtension(options.OutputPath, ".log"));
     var logger = loggerFactory.CreateLogger("BB2Jira");
 
-    logger.LogInformation("Режим: генерация map.json");
-    logger.LogInformation("Входной файл: {InputPath}", options.InputPath);
-    logger.LogInformation("Файл маппинга: {MapPath}", options.OutputPath);
+    logger.LogInformation("Mode: generate map.json");
+    logger.LogInformation("Input file: {InputPath}", options.InputPath);
+    logger.LogInformation("Mapping file: {MapPath}", options.OutputPath);
 
     try
     {
         var export = BitbucketLoader.Load(options.InputPath);
-        logger.LogInformation("Загружено issues: {IssueCount}", export.Issues.Count);
+        logger.LogInformation("Loaded issues: {IssueCount}", export.Issues.Count);
 
         MapGenerator.Generate(export, options.OutputPath, logger);
         return 0;
@@ -59,15 +59,15 @@ static int RunGenerateCsv(CliOptions options)
     using var loggerFactory = CreateLoggerFactory(Path.ChangeExtension(options.OutputPath, ".log"));
     var logger = loggerFactory.CreateLogger("BB2Jira");
 
-    logger.LogInformation("Режим: генерация import.csv");
-    logger.LogInformation("Входной файл: {InputPath}", options.InputPath);
-    logger.LogInformation("Файл маппинга: {MapPath}", options.MapPath);
-    logger.LogInformation("Результат: {OutputPath}", options.OutputPath);
+    logger.LogInformation("Mode: generate import.csv");
+    logger.LogInformation("Input file: {InputPath}", options.InputPath);
+    logger.LogInformation("Mapping file: {MapPath}", options.MapPath);
+    logger.LogInformation("Result: {OutputPath}", options.OutputPath);
 
     try
     {
         var export = BitbucketLoader.Load(options.InputPath);
-        logger.LogInformation("Загружено issues: {IssueCount}", export.Issues.Count);
+        logger.LogInformation("Loaded issues: {IssueCount}", export.Issues.Count);
 
         var map = MapLoader.Load(options.MapPath);
         CsvGenerator.Generate(export, map, options.OutputPath, logger);

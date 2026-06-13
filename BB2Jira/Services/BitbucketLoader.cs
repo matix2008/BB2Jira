@@ -15,7 +15,7 @@ public static class BitbucketLoader
     {
         if (!File.Exists(path))
         {
-            throw new FileNotFoundException($"Файл экспорта Bitbucket не найден: {path}", path);
+            throw new FileNotFoundException($"Bitbucket export file not found: {path}", path);
         }
 
         var json = File.ReadAllText(path);
@@ -32,7 +32,7 @@ public static class BitbucketLoader
         }
         catch (JsonException ex)
         {
-            throw new InvalidDataException($"Не удалось разобрать db-2.0.json: {ex.Message}", ex);
+            throw new InvalidDataException($"Failed to parse db-2.0.json: {ex.Message}", ex);
         }
     }
 }
