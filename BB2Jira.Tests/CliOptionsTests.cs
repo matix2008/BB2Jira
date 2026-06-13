@@ -101,4 +101,28 @@ public class CliOptionsTests
 
         Assert.Equal("import.csv", options.OutputPath);
     }
+
+    [Fact]
+    public void WhenVerboseFlagThenVerboseIsTrue()
+    {
+        var options = CliOptions.Parse(new[] { "-c", "-v" });
+
+        Assert.True(options.Verbose);
+    }
+
+    [Fact]
+    public void WhenVerboseLongFlagThenVerboseIsTrue()
+    {
+        var options = CliOptions.Parse(new[] { "-c", "--verbose" });
+
+        Assert.True(options.Verbose);
+    }
+
+    [Fact]
+    public void WhenNoVerboseFlagThenVerboseIsFalse()
+    {
+        var options = CliOptions.Parse(new[] { "-c" });
+
+        Assert.False(options.Verbose);
+    }
 }

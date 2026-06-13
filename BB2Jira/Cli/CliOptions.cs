@@ -37,6 +37,10 @@ public sealed class CliOptions
     /// <summary>Path to the result (-o): import.csv in CSV mode, map.json in map mode.</summary>
     public string OutputPath { get; private set; } = DefaultCsvPath;
 
+    /// <summary>When true, per-issue diagnostic messages are shown on the console (-v).</summary>
+    public bool Verbose { get; private set; }
+
+
     public IReadOnlyList<string> Errors => _errors;
 
     private readonly List<string> _errors = new();
@@ -100,6 +104,12 @@ public sealed class CliOptions
                 case "--help":
                     // Help is handled by the caller; the mode stays None.
                     break;
+
+                case "-v":
+                case "--verbose":
+                    options.Verbose = true;
+                    break;
+
 
                 default:
                     options._errors.Add($"Unknown argument: {arg}");
@@ -174,6 +184,7 @@ public sealed class CliOptions
           -c, --csv     generate import.csv mode
           -i, --input   path to the Bitbucket export file (db-2.0.json)
           -o, --output  path to the result (map.json or import.csv)
+          -v, --verbose show per-issue diagnostics on the console
           -h, --help    show help
         """;
 }

@@ -35,7 +35,7 @@ return options.Mode switch
 
 static int RunGenerateMap(CliOptions options)
 {
-    using var loggerFactory = CreateLoggerFactory(Path.ChangeExtension(options.OutputPath, ".log"));
+    using var loggerFactory = CreateLoggerFactory(Path.ChangeExtension(options.OutputPath, ".log"), options.Verbose);
     var logger = loggerFactory.CreateLogger("BB2Jira");
 
     logger.LogInformation("Mode: generate map.json");
@@ -59,7 +59,7 @@ static int RunGenerateMap(CliOptions options)
 
 static int RunGenerateCsv(CliOptions options)
 {
-    using var loggerFactory = CreateLoggerFactory(Path.ChangeExtension(options.OutputPath, ".log"));
+    using var loggerFactory = CreateLoggerFactory(Path.ChangeExtension(options.OutputPath, ".log"), options.Verbose);
     var logger = loggerFactory.CreateLogger("BB2Jira");
 
     logger.LogInformation("Mode: generate import.csv");
@@ -84,15 +84,23 @@ static int RunGenerateCsv(CliOptions options)
 }
 
 // Creates a Serilog logger factory that writes to the console and to the log file (import.log / map.log).
-static ILoggerFactory CreateLoggerFactory(string logPath)
+// The file always captures Debug-level detail; the console shows it only when verbose is enabled.
+static ILoggerFactory CreateLoggerFactory(string logPath, bool verbose)
 {
+    const string template = "{Timestamp:yyyy-MM-dd HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}";
+    var consoleLevel = verbose
+        ? Serilog.Events.LogEventLevel.Debug
+        : Serilog.Events.LogEventLevel.Information;
+
     var serilogLogger = new LoggerConfiguration()
-        .MinimumLevel.Information()
-        .WriteTo.Console(outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
-        .WriteTo.File(logPath, outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
+        .MinimumLevel.Debug()
+        .WriteTo.Console(restrictedToMinimumLevel: consoleLevel, outputTemplate: template)
+        .WriteTo.File(logPath, restrictedToMinimumLevel: Serilog.Events.LogEventLevel.Debug, outputTemplate: template)
         .CreateLogger();
 
-    return LoggerFactory.Create(builder => builder.AddSerilog(serilogLogger, dispose: true));
+    return LoggerFactory.Create(builder => builder
+        .SetMinimumLevel(LogLevel.Debug)
+        .AddSerilog(serilogLogger, dispose: true));
 }
 
 // Prints the utility name, version, and copyright banner on every launch.

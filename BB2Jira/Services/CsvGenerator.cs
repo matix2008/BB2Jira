@@ -145,7 +145,7 @@ public static class CsvGenerator
         {
             stats.MissingMapValues.Add($"kind: '{kind}'");
             stats.EmptyRequiredFields++;
-            logger.LogWarning("Issue {IssueId}: kind '{Kind}' is missing in map.json -- issue skipped.", issue.Id, kind);
+            logger.LogDebug("Issue {IssueId}: kind '{Kind}' is missing in map.json -- issue skipped.", issue.Id, kind);
             return false;
         }
 
@@ -153,7 +153,7 @@ public static class CsvGenerator
         if (!mapped.Equals("Task", StringComparison.OrdinalIgnoreCase) &&
             !mapped.Equals("Bug", StringComparison.OrdinalIgnoreCase))
         {
-            logger.LogInformation("Issue {IssueId}: type '{IssueType}' is not Task/Bug -- issue skipped.", issue.Id, mapped);
+            logger.LogDebug("Issue {IssueId}: type '{IssueType}' is not Task/Bug -- issue skipped.", issue.Id, mapped);
             return false;
         }
 
@@ -171,7 +171,7 @@ public static class CsvGenerator
 
         stats.MissingMapValues.Add($"status: '{status}'");
         stats.EmptyRequiredFields++;
-        logger.LogWarning("Issue {IssueId}: status '{Status}' is missing in map.json -- Status field is empty.", issue.Id, status);
+        logger.LogDebug("Issue {IssueId}: status '{Status}' is missing in map.json -- Status field is empty.", issue.Id, status);
         return string.Empty;
     }
 
@@ -189,7 +189,7 @@ public static class CsvGenerator
         }
 
         stats.MissingMapValues.Add($"priority: '{priority}'");
-        logger.LogWarning("Issue {IssueId}: priority '{Priority}' is missing in map.json -- using {Default}.", issue.Id, priority, MapDefaults.DefaultPriority);
+        logger.LogDebug("Issue {IssueId}: priority '{Priority}' is missing in map.json -- using {Default}.", issue.Id, priority, MapDefaults.DefaultPriority);
         return MapDefaults.DefaultPriority;
     }
 
@@ -202,7 +202,7 @@ public static class CsvGenerator
 
         stats.UnmappedUsers.Add(displayName);
         stats.EmptyRequiredFields++;
-        logger.LogWarning("Issue {IssueId}: reporter '{Reporter}' is not mapped -- Reporter field is empty.", issue.Id, displayName);
+        logger.LogDebug("Issue {IssueId}: reporter '{Reporter}' is not mapped -- Reporter field is empty.", issue.Id, displayName);
         return string.Empty;
     }
 
@@ -229,7 +229,7 @@ public static class CsvGenerator
         }
 
         stats.MissingMapValues.Add($"version: '{version}'");
-        logger.LogWarning("Issue {IssueId}: version '{Version}' is missing in map.json -- Fix Version/s field is empty.", issue.Id, version);
+        logger.LogDebug("Issue {IssueId}: version '{Version}' is missing in map.json -- Fix Version/s field is empty.", issue.Id, version);
         return string.Empty;
     }
 
@@ -247,7 +247,7 @@ public static class CsvGenerator
         }
 
         stats.MissingMapValues.Add($"milestone: '{milestone}'");
-        logger.LogWarning("Issue {IssueId}: milestone '{Milestone}' is missing in map.json -- Bitbucket Milestone field is empty.", issue.Id, milestone);
+        logger.LogDebug("Issue {IssueId}: milestone '{Milestone}' is missing in map.json -- Bitbucket Milestone field is empty.", issue.Id, milestone);
         return string.Empty;
     }
 
@@ -352,26 +352,26 @@ public static class CsvGenerator
 
         if (stats.SkippedIssues.Count > 0)
         {
-            logger.LogInformation(
+            logger.LogWarning(
                 "Skipped issues: {Count} (id: {Ids})",
                 stats.SkippedIssues.Count, string.Join(", ", stats.SkippedIssues));
         }
 
         if (stats.MissingMapValues.Count > 0)
         {
-            logger.LogInformation("Values missing in map.json ({Count}):", stats.MissingMapValues.Count);
+            logger.LogWarning("Values missing in map.json ({Count}):", stats.MissingMapValues.Count);
             foreach (var value in stats.MissingMapValues.OrderBy(v => v, StringComparer.Ordinal))
             {
-                logger.LogInformation("  {Value}", value);
+                logger.LogWarning("  {Value}", value);
             }
         }
 
         if (stats.UnmappedUsers.Count > 0)
         {
-            logger.LogInformation("Users without jiraAccountId/jiraEmail ({Count}):", stats.UnmappedUsers.Count);
+            logger.LogWarning("Users without jiraAccountId/jiraEmail ({Count}):", stats.UnmappedUsers.Count);
             foreach (var user in stats.UnmappedUsers.OrderBy(v => v, StringComparer.Ordinal))
             {
-                logger.LogInformation("  {User}", user);
+                logger.LogWarning("  {User}", user);
             }
         }
     }
