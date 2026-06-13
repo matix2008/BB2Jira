@@ -8,56 +8,62 @@ namespace BB2Jira.Tests;
 /// <summary>Tests for map.json generation and merge logic in <see cref="MapGenerator"/>.</summary>
 public class MapGeneratorTests
 {
-    [Fact]
-    public void WhenKnownKindThenDefaultMappingIsUsed()
+    [Theory]
+    [InlineData("bug", "Bug")]
+    [InlineData("task", "Task")]
+    [InlineData("enhancement", "Task")]
+    [InlineData("proposal", "Task")]
+    [InlineData("epic", "Task")]
+    public void WhenKindResolvedThenExpectedJiraType(string kind, string expected)
     {
         var export = new BitbucketExport
         {
-            Issues = { new BitbucketIssue { Id = 1, Kind = "bug" } },
+            Issues = { new BitbucketIssue { Id = 1, Kind = kind } },
         };
 
         var map = MapGenerator.Build(export, new MapFile());
 
-        Assert.Equal("Bug", map.Kind["bug"]);
+        Assert.Equal(expected, map.Kind[kind]);
     }
 
-    [Fact]
-    public void WhenUnknownKindThenDefaultsToTask()
+    [Theory]
+    [InlineData("new", "Backlog")]
+    [InlineData("open", "In Development")]
+    [InlineData("resolved", "Ready for Release")]
+    [InlineData("on hold", "Planned")]
+    [InlineData("invalid", "Canceled")]
+    [InlineData("duplicate", "Canceled")]
+    [InlineData("wontfix", "Canceled")]
+    [InlineData("frozen", "Backlog")]
+    public void WhenStatusResolvedThenExpectedJiraStatus(string status, string expected)
     {
         var export = new BitbucketExport
         {
-            Issues = { new BitbucketIssue { Id = 1, Kind = "epic" } },
+            Issues = { new BitbucketIssue { Id = 1, Status = status } },
         };
 
         var map = MapGenerator.Build(export, new MapFile());
 
-        Assert.Equal("Task", map.Kind["epic"]);
+        Assert.Equal(expected, map.Status[status]);
     }
 
-    [Fact]
-    public void WhenUnknownStatusThenDefaultsToBacklog()
+    [Theory]
+    [InlineData("trivial", "Lowest")]
+    [InlineData("minor", "Low")]
+    [InlineData("major", "Medium")]
+    [InlineData("critical", "High")]
+    [InlineData("blocker", "Highest")]
+    [InlineData("urgent", "Medium")]
+    public void WhenPriorityResolvedThenExpectedJiraPriority(string priority, string expected)
     {
         var export = new BitbucketExport
         {
-            Issues = { new BitbucketIssue { Id = 1, Status = "frozen" } },
+            Issues = { new BitbucketIssue { Id = 1, Priority = priority } },
         };
 
         var map = MapGenerator.Build(export, new MapFile());
 
-        Assert.Equal("Backlog", map.Status["frozen"]);
-    }
-
-    [Fact]
-    public void WhenUnknownPriorityThenDefaultsToMedium()
-    {
-        var export = new BitbucketExport
-        {
-            Issues = { new BitbucketIssue { Id = 1, Priority = "urgent" } },
-        };
-
-        var map = MapGenerator.Build(export, new MapFile());
-
-        Assert.Equal("Medium", map.Priority["urgent"]);
+        Assert.Equal(expected, map.Priority[priority]);
     }
 
     [Fact]
@@ -206,5 +212,102 @@ public class MapGeneratorTests
         var map = MapGenerator.Build(export, new MapFile());
 
         Assert.Empty(map.Kind);
+    }
+
+    [Fact]
+    public void WhenUserOnlyInLogThenItIsCollected()
+    {
+        var export = new BitbucketExport
+        {
+            Logs =
+            {
+                new BitbucketLog { Issue = 1, User = new BitbucketUser { AccountId = "log-user" } },
+            },
+        };
+
+        var map = MapGenerator.Build(export, new MapFile());
+
+        Assert.True(map.Users.ContainsKey("log-user"));
+    }
+
+    [Fact]
+    public void WhenCollectedUserThenJiraAccountIdAndEmailDefaultToEmpty()
+    {
+        var export = new BitbucketExport
+        {
+            Issues =
+            {
+                new BitbucketIssue { Id = 1, Reporter = new BitbucketUser { AccountId = "id1", DisplayName = "Anna" } },
+            },
+        };
+
+        var map = MapGenerator.Build(export, new MapFile());
+
+        Assert.Equal(string.Empty, map.Users["id1"].JiraAccountId);
+        Assert.Equal(string.Empty, map.Users["id1"].JiraEmail);
+    }
+
+    [Fact]
+    public void WhenMilestoneOnlyInIssueThenItIsAdded()
+    {
+        var export = new BitbucketExport
+        {
+            Issues =
+            {
+                new BitbucketIssue { Id = 1, Milestone = new BitbucketMilestone { Name = "MVP-3" } },
+            },
+        };
+
+        var map = MapGenerator.Build(export, new MapFile());
+
+        Assert.Equal("MVP-3", map.Milestone["MVP-3"]);
+    }
+
+    [Fact]
+    public void WhenVersionOnlyInReferenceThenItIsAdded()
+    {
+        var export = new BitbucketExport
+        {
+            Versions = { new BitbucketVersion { Name = "2.0" } },
+        };
+
+        var map = MapGenerator.Build(export, new MapFile());
+
+        Assert.Equal("2.0", map.Version["2.0"]);
+    }
+
+    [Fact]
+    public void WhenMultipleKindsThenKeysAreSortedAlphabetically()
+    {
+        var export = new BitbucketExport
+        {
+            Issues =
+            {
+                new BitbucketIssue { Id = 1, Kind = "task" },
+                new BitbucketIssue { Id = 2, Kind = "bug" },
+                new BitbucketIssue { Id = 3, Kind = "enhancement" },
+            },
+        };
+
+        var map = MapGenerator.Build(export, new MapFile());
+
+        Assert.Equal(new[] { "bug", "enhancement", "task" }, map.Kind.Keys.ToArray());
+    }
+
+    [Fact]
+    public void WhenSameValueInReferenceAndIssueThenAddedOnce()
+    {
+        var export = new BitbucketExport
+        {
+            Milestones = { new BitbucketMilestone { Name = "MVP-1" } },
+            Issues =
+            {
+                new BitbucketIssue { Id = 1, Milestone = new BitbucketMilestone { Name = "MVP-1" } },
+            },
+        };
+
+        var map = MapGenerator.Build(export, new MapFile());
+
+        Assert.Single(map.Milestone);
     }
 }

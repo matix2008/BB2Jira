@@ -23,6 +23,71 @@ public class CsvGeneratorTests
         return map;
     }
 
+    // Minimal RFC 4180 parser so quoted fields containing commas or CRLF are handled correctly.
+    private static List<List<string>> ParseCsv(string csv)
+    {
+        var rows = new List<List<string>>();
+        var row = new List<string>();
+        var field = new System.Text.StringBuilder();
+        var inQuotes = false;
+
+        for (var i = 0; i < csv.Length; i++)
+        {
+            var c = csv[i];
+
+            if (inQuotes)
+            {
+                if (c == '"')
+                {
+                    if (i + 1 < csv.Length && csv[i + 1] == '"')
+                    {
+                        field.Append('"');
+                        i++;
+                    }
+                    else
+                    {
+                        inQuotes = false;
+                    }
+                }
+                else
+                {
+                    field.Append(c);
+                }
+
+                continue;
+            }
+
+            switch (c)
+            {
+                case '"':
+                    inQuotes = true;
+                    break;
+                case ',':
+                    row.Add(field.ToString());
+                    field.Clear();
+                    break;
+                case '\r' when i + 1 < csv.Length && csv[i + 1] == '\n':
+                    row.Add(field.ToString());
+                    field.Clear();
+                    rows.Add(row);
+                    row = new List<string>();
+                    i++;
+                    break;
+                default:
+                    field.Append(c);
+                    break;
+            }
+        }
+
+        if (field.Length > 0 || row.Count > 0)
+        {
+            row.Add(field.ToString());
+            rows.Add(row);
+        }
+
+        return rows;
+    }
+
     [Fact]
     public void WhenTitleEmptyThenSummaryUsesIssueId()
     {
@@ -229,5 +294,323 @@ public class CsvGeneratorTests
         var csv = CsvGenerator.BuildCsv(export, MapWithKind(("bug", "Bug")), NewLogger()).ToString();
 
         Assert.True(csv.IndexOf("First", StringComparison.Ordinal) < csv.IndexOf("Second", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void WhenStatusMappedThenJiraStatusIsUsed()
+    {
+        var map = MapWithKind(("bug", "Bug"));
+        map.Status["open"] = "In Development";
+        var export = new BitbucketExport
+        {
+            Issues = { new BitbucketIssue { Id = 1, Kind = "bug", Status = "open" } },
+        };
+
+        var csv = CsvGenerator.BuildCsv(export, map, NewLogger()).ToString();
+
+        Assert.Contains("In Development", csv);
+    }
+
+    [Fact]
+    public void WhenPriorityMappedThenJiraPriorityIsUsed()
+    {
+        var map = MapWithKind(("bug", "Bug"));
+        map.Priority["critical"] = "High";
+        var export = new BitbucketExport
+        {
+            Issues = { new BitbucketIssue { Id = 1, Kind = "bug", Priority = "critical" } },
+        };
+
+        var csv = CsvGenerator.BuildCsv(export, map, NewLogger()).ToString();
+
+        Assert.Contains("High", csv);
+    }
+
+    [Fact]
+    public void WhenFixVersionMappedThenJiraVersionIsUsed()
+    {
+        var map = MapWithKind(("bug", "Bug"));
+        map.Version["1.0"] = "Release 1.0";
+        var export = new BitbucketExport
+        {
+            Issues = { new BitbucketIssue { Id = 1, Kind = "bug", Version = new BitbucketVersion { Name = "1.0" } } },
+        };
+
+        var csv = CsvGenerator.BuildCsv(export, map, NewLogger()).ToString();
+
+        Assert.Contains("Release 1.0", csv);
+    }
+
+    [Fact]
+    public void WhenMilestoneMappedThenJiraMilestoneIsUsed()
+    {
+        var map = MapWithKind(("bug", "Bug"));
+        map.Milestone["MVP-1"] = "Sprint 1";
+        var export = new BitbucketExport
+        {
+            Issues = { new BitbucketIssue { Id = 1, Kind = "bug", Milestone = new BitbucketMilestone { Name = "MVP-1" } } },
+        };
+
+        var csv = CsvGenerator.BuildCsv(export, map, NewLogger()).ToString();
+
+        Assert.Contains("Sprint 1", csv);
+    }
+
+    [Fact]
+    public void WhenReporterHasNoAccountIdThenEmailIsUsed()
+    {
+        var map = MapWithKind(("bug", "Bug"));
+        map.Users["id1"] = new UserMapping { JiraEmail = "anna@example.com" };
+        var export = new BitbucketExport
+        {
+            Issues =
+            {
+                new BitbucketIssue { Id = 1, Kind = "bug", Reporter = new BitbucketUser { AccountId = "id1" } },
+            },
+        };
+
+        var csv = CsvGenerator.BuildCsv(export, map, NewLogger()).ToString();
+
+        Assert.Contains("anna@example.com", csv);
+    }
+
+    [Fact]
+    public void WhenReporterNotMappedThenReporterFieldIsEmpty()
+    {
+        var export = new BitbucketExport
+        {
+            Issues =
+            {
+                new BitbucketIssue { Id = 1, Kind = "bug", Reporter = new BitbucketUser { DisplayName = "Stranger" } },
+            },
+        };
+
+        var csv = CsvGenerator.BuildCsv(export, MapWithKind(("bug", "Bug")), NewLogger()).ToString();
+        var dataRow = ParseCsv(csv)[1];
+
+        // Columns: [5] Reporter.
+        Assert.Equal(string.Empty, dataRow[5]);
+    }
+
+    [Fact]
+    public void WhenAssigneeMappedThenJiraAccountIdIsUsed()
+    {
+        var map = MapWithKind(("bug", "Bug"));
+        map.Users["id1"] = new UserMapping { JiraAccountId = "jira-assignee" };
+        var export = new BitbucketExport
+        {
+            Issues =
+            {
+                new BitbucketIssue { Id = 1, Kind = "bug", Assignee = new BitbucketUser { AccountId = "id1" } },
+            },
+        };
+
+        var csv = CsvGenerator.BuildCsv(export, map, NewLogger()).ToString();
+
+        Assert.Contains("jira-assignee", csv);
+    }
+
+    [Fact]
+    public void WhenAssigneeAbsentThenAssigneeFieldIsEmpty()
+    {
+        var export = new BitbucketExport
+        {
+            Issues = { new BitbucketIssue { Id = 1, Kind = "bug", Assignee = null } },
+        };
+
+        var csv = CsvGenerator.BuildCsv(export, MapWithKind(("bug", "Bug")), NewLogger()).ToString();
+        var dataRow = ParseCsv(csv)[1];
+
+        // Columns: [6] Assignee.
+        Assert.Equal(string.Empty, dataRow[6]);
+    }
+
+    [Fact]
+    public void WhenUpdatedPresentThenUpdatedValueIsUsed()
+    {
+        var export = new BitbucketExport
+        {
+            Issues =
+            {
+                new BitbucketIssue
+                {
+                    Id = 1,
+                    Kind = "bug",
+                    CreatedOn = new DateTimeOffset(2023, 5, 1, 0, 0, 0, TimeSpan.Zero),
+                    UpdatedOn = new DateTimeOffset(2023, 6, 2, 8, 15, 0, TimeSpan.Zero),
+                },
+            },
+        };
+
+        var csv = CsvGenerator.BuildCsv(export, MapWithKind(("bug", "Bug")), NewLogger()).ToString();
+
+        Assert.Contains("2023-06-02 08:15:00", csv);
+    }
+
+    [Fact]
+    public void WhenUpdatedAbsentThenCreatedValueIsUsed()
+    {
+        var created = new DateTimeOffset(2023, 5, 1, 10, 30, 45, TimeSpan.Zero);
+        var export = new BitbucketExport
+        {
+            Issues =
+            {
+                new BitbucketIssue { Id = 1, Kind = "bug", CreatedOn = created, UpdatedOn = null },
+            },
+        };
+
+        var csv = CsvGenerator.BuildCsv(export, MapWithKind(("bug", "Bug")), NewLogger()).ToString();
+        var dataRow = ParseCsv(csv)[1];
+
+        // Columns: [7] Created, [8] Updated.
+        Assert.Equal("2023-05-01 10:30:45", dataRow[7]);
+        Assert.Equal("2023-05-01 10:30:45", dataRow[8]);
+    }
+
+    [Fact]
+    public void WhenIssueExportedThenBitbucketIssueIdColumnHasId()
+    {
+        var export = new BitbucketExport
+        {
+            Issues = { new BitbucketIssue { Id = 99, Kind = "bug" } },
+        };
+
+        var csv = CsvGenerator.BuildCsv(export, MapWithKind(("bug", "Bug")), NewLogger()).ToString();
+        var dataRow = ParseCsv(csv)[1];
+
+        // Column [11] is Bitbucket Issue ID.
+        Assert.Equal("99", dataRow[11]);
+    }
+
+    [Fact]
+    public void WhenHistoryMappedThenFormattedWithJiraUser()
+    {
+        var map = MapWithKind(("bug", "Bug"));
+        map.Users["id1"] = new UserMapping { JiraAccountId = "jira-1" };
+        var export = new BitbucketExport
+        {
+            Issues = { new BitbucketIssue { Id = 1, Kind = "bug" } },
+            Logs =
+            {
+                new BitbucketLog
+                {
+                    Issue = 1,
+                    User = new BitbucketUser { AccountId = "id1" },
+                    Field = "status",
+                    ChangedFrom = "new",
+                    ChangedTo = "open",
+                    CreatedOn = new DateTimeOffset(2023, 5, 1, 9, 0, 0, TimeSpan.Zero),
+                },
+            },
+        };
+
+        var csv = CsvGenerator.BuildCsv(export, map, NewLogger()).ToString();
+
+        Assert.Contains("[Bitbucket history] status: new", csv);
+        Assert.Contains("jira-1", csv);
+    }
+
+    [Fact]
+    public void WhenHistoryAuthorNotMappedThenOriginalAuthorNotePresent()
+    {
+        var map = MapWithKind(("bug", "Bug"));
+        var export = new BitbucketExport
+        {
+            Issues = { new BitbucketIssue { Id = 1, Kind = "bug" } },
+            Logs =
+            {
+                new BitbucketLog
+                {
+                    Issue = 1,
+                    User = new BitbucketUser { DisplayName = "Stranger" },
+                    Field = "status",
+                    ChangedFrom = "new",
+                    ChangedTo = "open",
+                    CreatedOn = new DateTimeOffset(2023, 5, 1, 9, 0, 0, TimeSpan.Zero),
+                },
+            },
+        };
+
+        var csv = CsvGenerator.BuildCsv(export, map, NewLogger()).ToString();
+
+        Assert.Contains("Original Bitbucket author: Stranger", csv);
+    }
+
+    [Fact]
+    public void WhenCommentsAndLogsThenEventsSortedByCreatedOn()
+    {
+        var map = MapWithKind(("bug", "Bug"));
+        var export = new BitbucketExport
+        {
+            Issues = { new BitbucketIssue { Id = 1, Kind = "bug" } },
+            Comments =
+            {
+                new BitbucketComment
+                {
+                    Issue = 1,
+                    Content = new BitbucketContent { Raw = "later comment" },
+                    CreatedOn = new DateTimeOffset(2023, 5, 3, 0, 0, 0, TimeSpan.Zero),
+                },
+            },
+            Logs =
+            {
+                new BitbucketLog
+                {
+                    Issue = 1,
+                    Field = "status",
+                    ChangedFrom = "new",
+                    ChangedTo = "open",
+                    CreatedOn = new DateTimeOffset(2023, 5, 1, 0, 0, 0, TimeSpan.Zero),
+                },
+            },
+        };
+
+        var csv = CsvGenerator.BuildCsv(export, map, NewLogger()).ToString();
+
+        // The earlier history event must precede the later comment.
+        Assert.True(
+            csv.IndexOf("[Bitbucket history]", StringComparison.Ordinal) <
+            csv.IndexOf("later comment", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void WhenMultipleEventsThenCommentColumnRepeatsInHeader()
+    {
+        var map = MapWithKind(("bug", "Bug"));
+        var export = new BitbucketExport
+        {
+            Issues = { new BitbucketIssue { Id = 1, Kind = "bug" } },
+            Comments =
+            {
+                new BitbucketComment { Issue = 1, Content = new BitbucketContent { Raw = "c1" }, CreatedOn = new DateTimeOffset(2023, 5, 1, 0, 0, 0, TimeSpan.Zero) },
+                new BitbucketComment { Issue = 1, Content = new BitbucketContent { Raw = "c2" }, CreatedOn = new DateTimeOffset(2023, 5, 2, 0, 0, 0, TimeSpan.Zero) },
+            },
+        };
+
+        var csv = CsvGenerator.BuildCsv(export, map, NewLogger()).ToString();
+        var header = csv.Split("\r\n", StringSplitOptions.RemoveEmptyEntries)[0];
+
+        Assert.Equal(2, header.Split(',').Count(c => c == "Comment"));
+    }
+
+    [Fact]
+    public void WhenCommentContentEmptyThenEventIsSkipped()
+    {
+        var map = MapWithKind(("bug", "Bug"));
+        var export = new BitbucketExport
+        {
+            Issues = { new BitbucketIssue { Id = 1, Kind = "bug" } },
+            Comments =
+            {
+                new BitbucketComment { Issue = 1, Content = new BitbucketContent { Raw = "  " }, CreatedOn = new DateTimeOffset(2023, 5, 1, 0, 0, 0, TimeSpan.Zero) },
+            },
+        };
+
+        var csv = CsvGenerator.BuildCsv(export, map, NewLogger()).ToString();
+        var dataRow = ParseCsv(csv)[1];
+
+        // 12 base columns + 1 padded (empty) Comment column = 13 cells, last is empty.
+        Assert.Equal(13, dataRow.Count);
+        Assert.Equal(string.Empty, dataRow[12]);
     }
 }
