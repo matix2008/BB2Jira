@@ -59,6 +59,81 @@ public class BitbucketLoaderTests
     }
 
     [Fact]
+    public void WhenMilestoneIsStringThenNameIsParsed()
+    {
+        const string json = """
+        { "issues": [ { "id": 1, "kind": "bug", "milestone": "MVP-1" } ] }
+        """;
+
+        var export = BitbucketLoader.Parse(json);
+
+        Assert.Equal("MVP-1", export.Issues[0].Milestone!.Name);
+    }
+
+    [Fact]
+    public void WhenMilestoneIsNullThenMilestoneIsNull()
+    {
+        const string json = """
+        { "issues": [ { "id": 1, "kind": "bug", "milestone": null } ] }
+        """;
+
+        var export = BitbucketLoader.Parse(json);
+
+        Assert.Null(export.Issues[0].Milestone);
+    }
+
+    [Fact]
+    public void WhenVersionIsObjectThenNameIsParsed()
+    {
+        const string json = """
+        { "issues": [ { "id": 1, "kind": "bug", "version": { "id": 3, "name": "1.0" } } ] }
+        """;
+
+        var export = BitbucketLoader.Parse(json);
+
+        Assert.Equal("1.0", export.Issues[0].Version!.Name);
+    }
+
+    [Fact]
+    public void WhenVersionIsStringThenNameIsParsed()
+    {
+        const string json = """
+        { "issues": [ { "id": 1, "kind": "bug", "version": "1.0" } ] }
+        """;
+
+        var export = BitbucketLoader.Parse(json);
+
+        Assert.Equal("1.0", export.Issues[0].Version!.Name);
+    }
+
+    [Fact]
+    public void WhenVersionIsNullThenVersionIsNull()
+    {
+        const string json = """
+        { "issues": [ { "id": 1, "kind": "bug", "version": null } ] }
+        """;
+
+        var export = BitbucketLoader.Parse(json);
+
+        Assert.Null(export.Issues[0].Version);
+    }
+
+    [Fact]
+    public void WhenTopLevelMilestonesAreObjectsThenNamesAreParsed()
+    {
+        const string json = """
+        { "milestones": [ { "id": 1, "name": "MVP-1" } ], "versions": [ { "id": 2, "name": "1.0" } ] }
+        """;
+
+        var export = BitbucketLoader.Parse(json);
+
+        Assert.Equal("MVP-1", export.Milestones[0].Name);
+        Assert.Equal("1.0", export.Versions[0].Name);
+    }
+
+
+
+    [Fact]
     public void WhenUserHasAccountIdThenKeyIsAccountId()
     {
         const string json = """
