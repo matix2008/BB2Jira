@@ -5,6 +5,10 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <Version>1.0.0</Version>
+    <Product>BB2Jira</Product>
+    <Company>Realant Ltd.</Company>
+    <Copyright>(C) Realant Ltd., 2026. Apache license 2.0</Copyright>
   </PropertyGroup>
 
   <ItemGroup>

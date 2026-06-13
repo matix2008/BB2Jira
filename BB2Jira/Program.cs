@@ -1,7 +1,10 @@
-﻿using BB2Jira.Cli;
+﻿using System.Reflection;
+using BB2Jira.Cli;
 using BB2Jira.Services;
 using Microsoft.Extensions.Logging;
 using Serilog;
+
+PrintBanner();
 
 if (args.Length == 0 || args.Contains("-h") || args.Contains("--help"))
 {
@@ -90,4 +93,19 @@ static ILoggerFactory CreateLoggerFactory(string logPath)
         .CreateLogger();
 
     return LoggerFactory.Create(builder => builder.AddSerilog(serilogLogger, dispose: true));
+}
+
+// Prints the utility name, version, and copyright banner on every launch.
+static void PrintBanner()
+{
+    var assembly = Assembly.GetExecutingAssembly();
+    var name = assembly.GetName();
+    var version = name.Version?.ToString(3) ?? "1.0.0";
+    var product = assembly.GetCustomAttribute<AssemblyProductAttribute>()?.Product ?? name.Name ?? "BB2Jira";
+    var copyright = assembly.GetCustomAttribute<AssemblyCopyrightAttribute>()?.Copyright
+        ?? "(C) Realant Ltd., 2026. Apache license 2.0";
+
+    Console.WriteLine($"{product} v{version}");
+    Console.WriteLine(copyright);
+    Console.WriteLine();
 }
