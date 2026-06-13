@@ -88,6 +88,35 @@ public class CsvGeneratorTests
         return rows;
     }
 
+    // Captures formatted log messages so tests can assert on summary output.
+    private sealed class CapturingLogger : ILogger
+    {
+        public List<string> Messages { get; } = new();
+
+        public IDisposable BeginScope<TState>(TState state) where TState : notnull => NullScope.Instance;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            Messages.Add(formatter(state, exception));
+        }
+
+        private sealed class NullScope : IDisposable
+        {
+            public static readonly NullScope Instance = new();
+
+            public void Dispose()
+            {
+            }
+        }
+    }
+
     [Fact]
     public void WhenTitleEmptyThenSummaryUsesIssueId()
     {
@@ -612,5 +641,86 @@ public class CsvGeneratorTests
         // 12 base columns + 1 padded (empty) Comment column = 13 cells, last is empty.
         Assert.Equal(13, dataRow.Count);
         Assert.Equal(string.Empty, dataRow[12]);
+    }
+
+    [Fact]
+    public void WhenBuildingThenIssuesReadCountIsLogged()
+    {
+        var logger = new CapturingLogger();
+        var export = new BitbucketExport
+        {
+            Issues =
+            {
+                new BitbucketIssue { Id = 1, Kind = "bug" },
+                new BitbucketIssue { Id = 2, Kind = "bug" },
+            },
+        };
+
+        CsvGenerator.BuildCsv(export, MapWithKind(("bug", "Bug")), logger);
+
+        Assert.Contains("Issues read from db-2.0.json: 2", logger.Messages);
+    }
+
+    [Fact]
+    public void WhenAllImportedThenNoNotImportedWarning()
+    {
+        var logger = new CapturingLogger();
+        var export = new BitbucketExport
+        {
+            Issues = { new BitbucketIssue { Id = 1, Kind = "bug" } },
+        };
+
+        CsvGenerator.BuildCsv(export, MapWithKind(("bug", "Bug")), logger);
+
+        Assert.DoesNotContain(logger.Messages, m => m.StartsWith("Not imported:", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void WhenKindMissingThenNotImportedReasonIsLogged()
+    {
+        var logger = new CapturingLogger();
+        var export = new BitbucketExport
+        {
+            Issues = { new BitbucketIssue { Id = 7, Kind = "unknown" } },
+        };
+
+        CsvGenerator.BuildCsv(export, new MapFile(), logger);
+
+        Assert.Contains("Issue 7 not imported: kind 'unknown' is missing in map.json.", logger.Messages);
+    }
+
+    [Fact]
+    public void WhenTypeNotTaskOrBugThenNotImportedReasonIsLogged()
+    {
+        var logger = new CapturingLogger();
+        var export = new BitbucketExport
+        {
+            Issues = { new BitbucketIssue { Id = 9, Kind = "proposal" } },
+        };
+
+        CsvGenerator.BuildCsv(export, MapWithKind(("proposal", "Epic")), logger);
+
+        Assert.Contains("Issue 9 not imported: type 'Epic' is not Task/Bug.", logger.Messages);
+    }
+
+    [Fact]
+    public void WhenIssuesSkippedThenNotImportedCountMatchesDifference()
+    {
+        var logger = new CapturingLogger();
+        var export = new BitbucketExport
+        {
+            Issues =
+            {
+                new BitbucketIssue { Id = 1, Kind = "bug" },
+                new BitbucketIssue { Id = 2, Kind = "unknown" },
+                new BitbucketIssue { Id = 3, Kind = "proposal" },
+            },
+        };
+
+        CsvGenerator.BuildCsv(export, MapWithKind(("bug", "Bug"), ("proposal", "Epic")), logger);
+
+        Assert.Contains("Not imported: 2 of 3 issue(s). Reasons below:", logger.Messages);
+        Assert.Contains(logger.Messages, m => m.StartsWith("Issue 2 not imported:", StringComparison.Ordinal));
+        Assert.Contains(logger.Messages, m => m.StartsWith("Issue 3 not imported:", StringComparison.Ordinal));
     }
 }

@@ -42,6 +42,7 @@ public static class CsvGenerator
         ArgumentNullException.ThrowIfNull(logger);
 
         var stats = new GenerationStats();
+        stats.TotalIssues = export.Issues.Count;
         var commentsByIssue = export.Comments.ToLookup(c => c.Issue);
         var logsByIssue = export.Logs.ToLookup(l => l.Issue);
 
@@ -52,9 +53,9 @@ public static class CsvGenerator
         {
             stats.ProcessedIssues++;
 
-            if (!TryResolveIssueType(issue, map, logger, stats, out var issueType))
+            if (!TryResolveIssueType(issue, map, logger, stats, out var issueType, out var reason))
             {
-                stats.SkippedIssues.Add(issue.Id);
+                stats.SkippedDetails.Add((issue.Id, reason));
                 continue;
             }
 
@@ -136,16 +137,19 @@ public static class CsvGenerator
         MapFile map,
         ILogger logger,
         GenerationStats stats,
-        out string issueType)
+        out string issueType,
+        out string reason)
     {
         issueType = string.Empty;
+        reason = string.Empty;
         var kind = issue.Kind?.Trim();
 
         if (string.IsNullOrWhiteSpace(kind) || !map.Kind.TryGetValue(kind, out var mapped) || string.IsNullOrWhiteSpace(mapped))
         {
             stats.MissingMapValues.Add($"kind: '{kind}'");
             stats.EmptyRequiredFields++;
-            logger.LogDebug("Issue {IssueId}: kind '{Kind}' is missing in map.json -- issue skipped.", issue.Id, kind);
+            reason = $"kind '{kind}' is missing in map.json";
+            logger.LogDebug("Issue {IssueId}: {Reason} -- issue skipped.", issue.Id, reason);
             return false;
         }
 
@@ -153,7 +157,8 @@ public static class CsvGenerator
         if (!mapped.Equals("Task", StringComparison.OrdinalIgnoreCase) &&
             !mapped.Equals("Bug", StringComparison.OrdinalIgnoreCase))
         {
-            logger.LogDebug("Issue {IssueId}: type '{IssueType}' is not Task/Bug -- issue skipped.", issue.Id, mapped);
+            reason = $"type '{mapped}' is not Task/Bug";
+            logger.LogDebug("Issue {IssueId}: {Reason} -- issue skipped.", issue.Id, reason);
             return false;
         }
 
@@ -344,17 +349,26 @@ public static class CsvGenerator
     private static void WriteSummary(ILogger logger, GenerationStats stats)
     {
         logger.LogInformation("----- import.csv generation summary -----");
+        logger.LogInformation("Issues read from db-2.0.json: {TotalIssues}", stats.TotalIssues);
         logger.LogInformation("Processed issues: {ProcessedIssues}", stats.ProcessedIssues);
         logger.LogInformation("Exported rows: {ExportedRows}", stats.ExportedRows);
         logger.LogInformation("Comments: {Comments}", stats.Comments);
         logger.LogInformation("History entries: {History}", stats.History);
         logger.LogInformation("Empty required fields: {EmptyRequiredFields}", stats.EmptyRequiredFields);
 
-        if (stats.SkippedIssues.Count > 0)
+        // When the number of exported rows differs from the number of issues read,
+        // report every not-imported issue together with the reason it was skipped.
+        if (stats.ExportedRows != stats.TotalIssues)
         {
+            var notImported = stats.TotalIssues - stats.ExportedRows;
             logger.LogWarning(
-                "Skipped issues: {Count} (id: {Ids})",
-                stats.SkippedIssues.Count, string.Join(", ", stats.SkippedIssues));
+                "Not imported: {NotImported} of {TotalIssues} issue(s). Reasons below:",
+                notImported, stats.TotalIssues);
+
+            foreach (var (id, reason) in stats.SkippedDetails.OrderBy(d => d.Id))
+            {
+                logger.LogWarning("Issue {IssueId} not imported: {Reason}.", id, reason);
+            }
         }
 
         if (stats.MissingMapValues.Count > 0)
@@ -378,6 +392,8 @@ public static class CsvGenerator
 
     private sealed class GenerationStats
     {
+        public int TotalIssues { get; set; }
+
         public int ProcessedIssues { get; set; }
 
         public int ExportedRows { get; set; }
@@ -388,7 +404,7 @@ public static class CsvGenerator
 
         public int EmptyRequiredFields { get; set; }
 
-        public List<int> SkippedIssues { get; } = new();
+        public List<(int Id, string Reason)> SkippedDetails { get; } = new();
 
         public HashSet<string> MissingMapValues { get; } = new(StringComparer.Ordinal);
 
