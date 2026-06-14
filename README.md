@@ -92,7 +92,7 @@ The `-k` key checks an existing `import.csv` and writes a log to `import-check.l
 | 5 | `Created` / `Updated` match format `yyyy-MM-dd HH:mm:ss` | Warning | No |
 | 6 | `Bitbucket Issue ID` values are unique | Warning | No |
 | 7 | *(when `-i` is resolvable)* Every issue from the export has a row in the CSV | Warning | No |
-| 8 | *(when `-m` is resolvable)* `Issue Type` values match the `kind` map | Warning | No |
+| 8 | *(when `-m` is resolvable)* `Issue Type`, `Status`, `Priority`, `Fix Version/s`, `Bitbucket Milestone` values match mapped values in `map.json` (case-sensitive) | Warning | No |
 | 9 | No duplicate column names in the header | Error | No |
 | 10 | No columns outside the allowed set (`BaseColumns` + `Comment*`) | Warning | No |
 | 11 | No hidden or control characters in column names (`BOM`, `\t`, `\r`, `\n`, `\u00A0`, zero-width chars) | Error | No |

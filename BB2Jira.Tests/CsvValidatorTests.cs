@@ -382,7 +382,7 @@ public class CsvValidatorTests
     }
 
     // -------------------------------------------------------------------------
-    // Check 8: Issue Type vs map.json kind (warning-level)
+    // Check 8: mapped field values against map.json (warning-level, case-sensitive)
     // -------------------------------------------------------------------------
 
     [Fact]
@@ -415,7 +415,110 @@ public class CsvValidatorTests
         var result = CsvValidator.Validate(path, logger, map: map);
 
         Assert.True(result);
-        Assert.False(logger.HasWarning("Bug"));
+        Assert.False(logger.HasWarning("Issue Type"));
+    }
+
+    [Fact]
+    public void Validate_StatusNotInMapStatus_ReturnsWithWarning()
+    {
+        var csv = MakeCsv(MakeRow(status: "Closed"));
+        var path = WriteTempCsv(csv);
+        var logger = new CapturingLogger();
+
+        var map = new MapFile();
+        map.Kind["bug"] = "Bug";
+        map.Status["open"] = "Open";
+
+        var result = CsvValidator.Validate(path, logger, map: map);
+
+        Assert.True(result);
+        Assert.True(logger.HasWarning("Closed"));
+    }
+
+    [Fact]
+    public void Validate_PriorityNotInMapPriority_ReturnsWithWarning()
+    {
+        var csv = MakeCsv(MakeRow(priority: "Unknown"));
+        var path = WriteTempCsv(csv);
+        var logger = new CapturingLogger();
+
+        var map = new MapFile();
+        map.Kind["bug"] = "Bug";
+        map.Priority["major"] = "Medium";
+
+        var result = CsvValidator.Validate(path, logger, map: map);
+
+        Assert.True(result);
+        Assert.True(logger.HasWarning("Unknown"));
+    }
+
+    [Fact]
+    public void Validate_FixVersionNotInMapVersion_ReturnsWithWarning()
+    {
+        var csv = MakeCsv(MakeRow(fixVersion: "3.0"));
+        var path = WriteTempCsv(csv);
+        var logger = new CapturingLogger();
+
+        var map = new MapFile();
+        map.Kind["bug"] = "Bug";
+        map.Version["1.0"] = "1.0";
+
+        var result = CsvValidator.Validate(path, logger, map: map);
+
+        Assert.True(result);
+        Assert.True(logger.HasWarning("3.0"));
+    }
+
+    [Fact]
+    public void Validate_MilestoneNotInMapMilestone_ReturnsWithWarning()
+    {
+        var csv = MakeCsv(MakeRow(milestone: "Sprint-99"));
+        var path = WriteTempCsv(csv);
+        var logger = new CapturingLogger();
+
+        var map = new MapFile();
+        map.Kind["bug"] = "Bug";
+        map.Milestone["Sprint-1"] = "Sprint-1";
+
+        var result = CsvValidator.Validate(path, logger, map: map);
+
+        Assert.True(result);
+        Assert.True(logger.HasWarning("Sprint-99"));
+    }
+
+    [Fact]
+    public void Validate_WrongCaseMappedValue_ReturnsWithWarning()
+    {
+        // "bug" is a mapped value but the CSV contains "BUG" (wrong case).
+        var csv = MakeCsv(MakeRow(issueType: "BUG"));
+        var path = WriteTempCsv(csv);
+        var logger = new CapturingLogger();
+
+        var map = new MapFile();
+        map.Kind["bug"] = "Bug";
+
+        var result = CsvValidator.Validate(path, logger, map: map);
+
+        Assert.True(result);
+        Assert.True(logger.HasWarning("BUG"));
+    }
+
+    [Fact]
+    public void Validate_EmptyMapSection_SkipsColumnCheck()
+    {
+        // Status section is empty → no warnings for Status column values.
+        var csv = MakeCsv(MakeRow(status: "AnythingGoes"));
+        var path = WriteTempCsv(csv);
+        var logger = new CapturingLogger();
+
+        var map = new MapFile();
+        map.Kind["bug"] = "Bug";
+        // map.Status intentionally empty
+
+        var result = CsvValidator.Validate(path, logger, map: map);
+
+        Assert.True(result);
+        Assert.False(logger.HasWarning("AnythingGoes"));
     }
 
     // -------------------------------------------------------------------------
@@ -437,6 +540,8 @@ public class CsvValidatorTests
         var map = new MapFile();
         map.Kind["bug"] = "Bug";
         map.Kind["task"] = "Task";
+        map.Status["open"] = "Open";
+        map.Priority["major"] = "Medium";
 
         var result = CsvValidator.Validate(path, logger, export, map);
 

@@ -119,16 +119,16 @@ public static class CsvValidator
             ReportCheck(logger, 7, "All export issues present in CSV", 0, 0, skipped: true);
         }
 
-        // Check 8 (when map is provided): Issue Type must be a valid value from map.json kind.
+        // Check 8 (when map is provided): mapped column values must appear in map.json (case-sensitive).
         (e0, w0) = (stats.ErrorCount, stats.WarningCount);
         if (map is not null)
         {
-            ValidateIssueTypes(dataRows, colIndex, map, logger, stats);
-            ReportCheck(logger, 8, "Issue Type values in map.json kind", stats.ErrorCount - e0, stats.WarningCount - w0);
+            ValidateMappedValues(dataRows, colIndex, map, logger, stats);
+            ReportCheck(logger, 8, "Mapped field values present in map.json (case-sensitive)", stats.ErrorCount - e0, stats.WarningCount - w0);
         }
         else
         {
-            ReportCheck(logger, 8, "Issue Type values in map.json kind", 0, 0, skipped: true);
+            ReportCheck(logger, 8, "Mapped field values present in map.json (case-sensitive)", 0, 0, skipped: true);
         }
 
         var hasErrors = stats.ErrorCount > 0;
@@ -445,50 +445,64 @@ public static class CsvValidator
     }
 
     // -------------------------------------------------------------------------
-    // Check 8: Issue Type values against map.json kind
+    // Check 8: mapped column values against map.json (case-sensitive)
     // -------------------------------------------------------------------------
 
-    private static void ValidateIssueTypes(
+    private static void ValidateMappedValues(
         List<List<string>> dataRows,
         Dictionary<string, int> colIndex,
         MapFile map,
         ILogger logger,
         ValidationStats stats)
     {
-        if (!colIndex.TryGetValue("Issue Type", out var idx))
+        // Each entry defines: CSV column name → allowed values (mapped values from map.json section).
+        // Empty cells are skipped — the field is simply absent for that row.
+        // Comparison is Ordinal (case-sensitive) as agreed.
+        var mappings = new[]
         {
-            return;
-        }
+            ("Issue Type",         map.Kind.Values),
+            ("Status",             map.Status.Values),
+            ("Priority",           map.Priority.Values),
+            ("Fix Version/s",      map.Version.Values),
+            ("Bitbucket Milestone", map.Milestone.Values),
+        };
 
-        // Valid values are the unique non-empty mapped values in map.Kind.
-        var validTypes = map.Kind.Values
-            .Where(v => !string.IsNullOrWhiteSpace(v))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        var badRows = new List<(int Row, string Value)>();
-
-        for (var r = 0; r < dataRows.Count; r++)
+        foreach (var (column, allowedValues) in mappings)
         {
-            var value = dataRows[r].Count > idx ? dataRows[r][idx] : string.Empty;
-            if (!string.IsNullOrWhiteSpace(value) && !validTypes.Contains(value))
+            if (!colIndex.TryGetValue(column, out var idx))
             {
-                badRows.Add((r + 2, value));
+                continue;
             }
-        }
 
-        if (badRows.Count > 0)
-        {
-            foreach (var (row, value) in badRows)
+            // Build the allowed set once per column; exclude empty mapped values.
+            var allowed = allowedValues
+                .Where(v => !string.IsNullOrWhiteSpace(v))
+                .ToHashSet(StringComparer.Ordinal);
+
+            // When the map section is entirely empty, skip the column check:
+            // the user has not configured that section yet.
+            if (allowed.Count == 0)
             {
-                logger.LogWarning(
-                    "Row {Row}: Issue Type '{Value}' is not a mapped value in map.json kind.",
-                    row, value);
-                stats.WarningCount++;
+                logger.LogDebug("map.json '{Column}' section has no mapped values -- column check skipped.", column);
+                continue;
             }
-        }
-        else
-        {
-            logger.LogDebug("All Issue Type values match map.json kind mappings.");
+
+            for (var r = 0; r < dataRows.Count; r++)
+            {
+                var value = dataRows[r].Count > idx ? dataRows[r][idx] : string.Empty;
+                if (string.IsNullOrWhiteSpace(value))
+                {
+                    continue;
+                }
+
+                if (!allowed.Contains(value))
+                {
+                    logger.LogWarning(
+                        "Row {Row}: '{Column}' value '{Value}' is not in map.json (case-sensitive).",
+                        r + 2, column, value);
+                    stats.WarningCount++;
+                }
+            }
         }
     }
 
