@@ -56,6 +56,12 @@ public sealed class JiraUpdater
         // Phase 1: build Bitbucket ID → Jira key map.
         _logger.LogInformation("Phase 1: searching Jira project '{Project}' for imported issues…", _settings.ProjectKey);
         var bbIdToJiraKey = await BuildBitbucketIdMapAsync(ct).ConfigureAwait(false);
+        if (bbIdToJiraKey is null)
+        {
+            _logger.LogError("Phase 1 failed. Aborting.");
+            return false;
+        }
+
         _logger.LogInformation("Phase 1 complete: {Count} issue(s) mapped.", bbIdToJiraKey.Count);
 
         // Load CSV rows (skip header).
@@ -144,12 +150,13 @@ public sealed class JiraUpdater
     // Phase 1: build Bitbucket ID → Jira key map
     // -------------------------------------------------------------------------
 
-    private async Task<Dictionary<int, string>> BuildBitbucketIdMapAsync(CancellationToken ct)
+    private async Task<Dictionary<int, string>?> BuildBitbucketIdMapAsync(CancellationToken ct)
     {
         // Escape the repo URL for use in a JQL "~" (contains) search.
         // We search for issues whose description contains the base path of the repo URL.
         var repoPath = _settings.BitbucketRepoUrl.TrimEnd('/');
         var jql = $"project = \"{_settings.ProjectKey}\" AND description ~ \"{repoPath}/issues\" ORDER BY created ASC";
+        _logger.LogDebug("Phase 1 JQL: {Jql}", jql);
 
         // Build issue-number extraction pattern: .../issues/42
         var issuePattern = new Regex(
@@ -163,7 +170,20 @@ public sealed class JiraUpdater
         while (true)
         {
             ct.ThrowIfCancellationRequested();
-            var page = await _client.SearchAsync(jql, startAt, pageSize, ct).ConfigureAwait(false);
+
+            List<JiraIssueRef> page;
+            try
+            {
+                page = await _client.SearchAsync(jql, startAt, pageSize, ct).ConfigureAwait(false);
+            }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogError(
+                    "Phase 1 search failed (startAt={StartAt}): {Message}",
+                    startAt, ex.Message);
+                return null;
+            }
+
             if (page.Count == 0)
             {
                 break;

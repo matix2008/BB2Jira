@@ -35,6 +35,8 @@ public sealed class JiraClient : IJiraClient, IDisposable
             new AuthenticationHeaderValue("Basic", credentials);
         _http.DefaultRequestHeaders.Accept
             .Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+        _logger.LogDebug("Jira client: baseUrl={BaseUrl}, email={Email}", settings.BaseUrl, settings.Email);
     }
 
     /// <inheritdoc/>
@@ -127,10 +129,24 @@ public sealed class JiraClient : IJiraClient, IDisposable
     public async Task<List<JiraIssueRef>> SearchAsync(
         string jql, int startAt, int maxResults, CancellationToken ct = default)
     {
-        var query = Uri.EscapeDataString(jql);
-        var url = $"rest/api/3/search?jql={query}&startAt={startAt}&maxResults={maxResults}&fields=key,description";
+        // POST /rest/api/3/search/jql is the current Atlassian endpoint.
+        // The older GET /rest/api/3/search was deprecated and returns 410 Gone.
+        var requestBody = JsonSerializer.Serialize(new
+        {
+            jql,
+            startAt,
+            maxResults,
+            fields = new[] { "key", "description" },
+        });
 
-        var response = await _http.GetAsync(url, ct).ConfigureAwait(false);
+        _logger.LogDebug(
+            "Search POST rest/api/3/search/jql startAt={StartAt} maxResults={MaxResults} jql={Jql}",
+            startAt, maxResults, jql);
+
+        var content = new StringContent(requestBody, Encoding.UTF8, "application/json");
+        var response = await _http
+            .PostAsync("rest/api/3/search/jql", content, ct)
+            .ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
 
         using var doc = await JsonDocument.ParseAsync(
