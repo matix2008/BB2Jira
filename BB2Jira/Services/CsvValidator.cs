@@ -113,6 +113,16 @@ public static class CsvValidator
             ReportCheck(logger, 8, "Issue Type values in map.json kind", 0, 0, skipped: true);
         }
 
+        // Check 9: no duplicate column names in header.
+        (e0, w0) = (stats.ErrorCount, stats.WarningCount);
+        ValidateDuplicateColumns(rows![0], logger, stats);
+        ReportCheck(logger, 9, "No duplicate column names in header", stats.ErrorCount - e0, stats.WarningCount - w0);
+
+        // Check 10: no unknown column names in header.
+        (e0, w0) = (stats.ErrorCount, stats.WarningCount);
+        ValidateUnknownColumns(rows![0], logger, stats);
+        ReportCheck(logger, 10, "No unknown columns outside BaseColumns + Comment", stats.ErrorCount - e0, stats.WarningCount - w0);
+
         var hasErrors = stats.ErrorCount > 0;
         WriteSummary(logger, stats, hasErrors);
         return !hasErrors;
@@ -475,6 +485,76 @@ public static class CsvValidator
     }
 
     // -------------------------------------------------------------------------
+    // Check 9: no duplicate column names in header
+    // -------------------------------------------------------------------------
+
+    private static void ValidateDuplicateColumns(
+        List<string> header,
+        ILogger logger,
+        ValidationStats stats)
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var duplicates = new List<string>();
+
+        foreach (var col in header)
+        {
+            // Multiple "Comment" columns are allowed by design.
+            if (col.Equals("Comment", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (!seen.Add(col))
+            {
+                duplicates.Add(col);
+            }
+        }
+
+        if (duplicates.Count > 0)
+        {
+            foreach (var col in duplicates.Distinct(StringComparer.Ordinal))
+            {
+                logger.LogError("Duplicate column name in header: '{Column}'", col);
+                stats.ErrorCount++;
+            }
+        }
+        else
+        {
+            logger.LogDebug("No duplicate column names in header.");
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Check 10: no unknown column names in header
+    // -------------------------------------------------------------------------
+
+    private static void ValidateUnknownColumns(
+        List<string> header,
+        ILogger logger,
+        ValidationStats stats)
+    {
+        // Allowed: the 12 required base columns plus any number of "Comment" columns.
+        var unknown = header
+            .Where(col => !RequiredColumns.Contains(col, StringComparer.Ordinal)
+                          && !col.Equals("Comment", StringComparison.Ordinal))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        if (unknown.Count > 0)
+        {
+            foreach (var col in unknown)
+            {
+                logger.LogWarning("Unknown column in header: '{Column}'", col);
+                stats.WarningCount++;
+            }
+        }
+        else
+        {
+            logger.LogDebug("All header columns are within the allowed set.");
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // Per-check result line
     // -------------------------------------------------------------------------
 
@@ -490,7 +570,7 @@ public static class CsvValidator
         int warnsDelta,
         bool skipped = false)
     {
-        const int total = 8;
+        const int total = 10;
         if (skipped)
         {
             logger.LogInformation("[{Number}/{Total}] {Description} -- SKIPPED", number, total, description);

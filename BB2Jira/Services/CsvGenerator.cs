@@ -270,6 +270,7 @@ public static class CsvGenerator
     {
         var events = new List<(DateTimeOffset Order, string Text)>();
 
+        // Each user comment becomes one Comment column.
         foreach (var comment in comments)
         {
             var text = comment.Content?.Text;
@@ -282,10 +283,17 @@ public static class CsvGenerator
             events.Add((comment.CreatedOn ?? DateTimeOffset.MinValue, FormatComment(comment, text!, map)));
         }
 
-        foreach (var log in logs)
+        // All log entries (status changes, reassignments, etc.) are merged into a single
+        // Comment column to avoid creating one column per log entry.
+        // The block is ordered chronologically within itself and placed at the date of the
+        // earliest log entry so it stays in the correct position relative to user comments.
+        var sortedLogs = logs.OrderBy(l => l.CreatedOn ?? DateTimeOffset.MinValue).ToList();
+        if (sortedLogs.Count > 0)
         {
-            stats.History++;
-            events.Add((log.CreatedOn ?? DateTimeOffset.MinValue, FormatHistory(log, map)));
+            stats.History += sortedLogs.Count;
+            var earliest = sortedLogs[0].CreatedOn ?? DateTimeOffset.MinValue;
+            var historyBlock = string.Join("\r\n", sortedLogs.Select(l => FormatHistory(l, map)));
+            events.Add((earliest, historyBlock));
         }
 
         return events
@@ -297,13 +305,16 @@ public static class CsvGenerator
     private static string FormatComment(BitbucketComment comment, string text, MapFile map)
     {
         var date = FormatDate(comment.CreatedOn);
-        if (TryResolveUser(comment.User, map, out var jiraUser, out _))
-        {
-            return $"{date};{jiraUser};{text}";
-        }
+        TryResolveUser(comment.User, map, out var jiraUser, out var displayName);
 
-        var author = ResolveDisplayName(comment.User);
-        return $"{date};;[Original Bitbucket author: {author}]\r\n\r\n{text}";
+        // Format: date;jiraAccountId;text
+        // When the author is not mapped, the Account ID field is empty and the original
+        // author name is prepended to the comment text for traceability.
+        var body = string.IsNullOrWhiteSpace(jiraUser)
+            ? $"[Original Bitbucket author: {displayName}]\r\n\r\n{text}"
+            : text;
+
+        return $"{date};{jiraUser};{body}";
     }
 
     private static string FormatHistory(BitbucketLog log, MapFile map)

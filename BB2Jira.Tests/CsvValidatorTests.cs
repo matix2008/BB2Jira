@@ -473,4 +473,85 @@ public class CsvValidatorTests
 
         Assert.False(result);
     }
+
+    // -------------------------------------------------------------------------
+    // Check 9: no duplicate column names in header (error-level)
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public void Validate_DuplicateColumnInHeader_ReturnsFalseWithError()
+    {
+        // Repeat "Summary" in the header.
+        var header = "Issue Type,Summary,Summary,Description,Status,Priority,Reporter,Assignee,Created,Updated,Fix Version/s,Bitbucket Milestone,Bitbucket Issue ID";
+        var csv = header + "\r\n";
+        var path = WriteTempCsv(csv);
+        var logger = new CapturingLogger();
+
+        var result = CsvValidator.Validate(path, logger);
+
+        Assert.False(result);
+        Assert.True(logger.HasError("Summary"));
+    }
+
+    [Fact]
+    public void Validate_NoDuplicateColumns_PassesWithoutError()
+    {
+        var csv = MakeCsv(MakeRow());
+        var path = WriteTempCsv(csv);
+        var logger = new CapturingLogger();
+
+        var result = CsvValidator.Validate(path, logger);
+
+        Assert.True(result);
+        Assert.False(logger.HasError("Duplicate column"));
+    }
+
+    // -------------------------------------------------------------------------
+    // Check 10: no unknown columns (warning-level)
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public void Validate_UnknownColumnInHeader_ReturnsWithWarning()
+    {
+        // Append an unknown column "Notes" after the required ones.
+        var header = ValidHeader + ",Notes";
+        var dataRow = MakeRow() + ",some note";
+        var csv = header + "\r\n" + dataRow + "\r\n";
+        var path = WriteTempCsv(csv);
+        var logger = new CapturingLogger();
+
+        var result = CsvValidator.Validate(path, logger);
+
+        Assert.True(result);
+        Assert.True(logger.HasWarning("Notes"));
+    }
+
+    [Fact]
+    public void Validate_CommentColumnsAreAllowed()
+    {
+        // Extra Comment columns after BaseColumns must not trigger a warning.
+        var header = ValidHeader + ",Comment,Comment";
+        var dataRow = MakeRow() + ",c1,c2";
+        var csv = header + "\r\n" + dataRow + "\r\n";
+        var path = WriteTempCsv(csv);
+        var logger = new CapturingLogger();
+
+        var result = CsvValidator.Validate(path, logger);
+
+        Assert.True(result);
+        Assert.False(logger.HasWarning("Comment"));
+    }
+
+    [Fact]
+    public void Validate_OnlyAllowedColumns_PassesWithoutWarning()
+    {
+        var csv = MakeCsv(MakeRow());
+        var path = WriteTempCsv(csv);
+        var logger = new CapturingLogger();
+
+        var result = CsvValidator.Validate(path, logger);
+
+        Assert.True(result);
+        Assert.False(logger.HasWarning("Unknown column"));
+    }
 }

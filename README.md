@@ -93,6 +93,8 @@ The `-k` key checks an existing `import.csv` and writes a log to `import-check.l
 | 6 | `Bitbucket Issue ID` values are unique | Warning | No |
 | 7 | *(when `-i` is resolvable)* Every issue from the export has a row in the CSV | Warning | No |
 | 8 | *(when `-m` is resolvable)* `Issue Type` values match the `kind` map | Warning | No |
+| 9 | No duplicate column names in the header | Error | No |
+| 10 | No columns outside the allowed set (`BaseColumns` + `Comment*`) | Warning | No |
 
 ### Exit codes
 
