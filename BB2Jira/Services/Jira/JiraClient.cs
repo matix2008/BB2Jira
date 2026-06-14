@@ -126,50 +126,79 @@ public sealed class JiraClient : IJiraClient, IDisposable
     }
 
     /// <inheritdoc/>
-    public async Task<List<JiraIssueRef>> SearchAsync(
-        string jql, int startAt, int maxResults, CancellationToken ct = default)
+    public async Task<JiraSearchPage> SearchAsync(
+        string jql, int maxResults, string? nextPageToken, CancellationToken ct = default)
     {
-        // POST /rest/api/3/search/jql is the current Atlassian endpoint.
+        // POST /rest/api/3/search/jql is the current Atlassian "Enhanced JQL search" endpoint.
         // The older GET /rest/api/3/search was deprecated and returns 410 Gone.
-        var requestBody = JsonSerializer.Serialize(new
+        // This endpoint uses token-based pagination (nextPageToken), not startAt/offset;
+        // sending startAt is rejected with 400 "Invalid request payload".
+        var payload = new Dictionary<string, object>
         {
-            jql,
-            startAt,
-            maxResults,
-            fields = new[] { "key", "description" },
-        });
+            ["jql"] = jql,
+            ["maxResults"] = maxResults,
+            ["fields"] = new[] { "key", "description" },
+        };
+        if (!string.IsNullOrEmpty(nextPageToken))
+        {
+            payload["nextPageToken"] = nextPageToken;
+        }
+
+        var requestBody = JsonSerializer.Serialize(payload);
 
         _logger.LogDebug(
-            "Search POST rest/api/3/search/jql startAt={StartAt} maxResults={MaxResults} jql={Jql}",
-            startAt, maxResults, jql);
+            "Search POST rest/api/3/search/jql maxResults={MaxResults} nextPageToken={Token} jql={Jql}",
+            maxResults, nextPageToken ?? "(first page)", jql);
 
         var content = new StringContent(requestBody, Encoding.UTF8, "application/json");
         var response = await _http
             .PostAsync("rest/api/3/search/jql", content, ct)
             .ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            _logger.LogError(
+                "Search failed: {StatusCode} ({Reason}). Response body: {Body}",
+                (int)response.StatusCode, response.ReasonPhrase,
+                body.Length > 500 ? body[..500] + "\u2026" : body);
+            response.EnsureSuccessStatusCode(); // throws HttpRequestException caught by caller
+        }
 
         using var doc = await JsonDocument.ParseAsync(
             await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false), cancellationToken: ct)
             .ConfigureAwait(false);
 
         var results = new List<JiraIssueRef>();
-        foreach (var issue in doc.RootElement.GetProperty("issues").EnumerateArray())
+        if (doc.RootElement.TryGetProperty("issues", out var issues) &&
+            issues.ValueKind == JsonValueKind.Array)
         {
-            var key = issue.GetProperty("key").GetString() ?? string.Empty;
-
-            // description is an ADF document; extract plain text from all "text" nodes.
-            var description = string.Empty;
-            if (issue.GetProperty("fields").TryGetProperty("description", out var descElem) &&
-                descElem.ValueKind == JsonValueKind.Object)
+            foreach (var issue in issues.EnumerateArray())
             {
-                description = ExtractAdfText(descElem);
-            }
+                var key = issue.GetProperty("key").GetString() ?? string.Empty;
 
-            results.Add(new JiraIssueRef(key, description));
+                // description is an ADF document; extract plain text from all "text" nodes.
+                var description = string.Empty;
+                if (issue.TryGetProperty("fields", out var fields) &&
+                    fields.TryGetProperty("description", out var descElem) &&
+                    descElem.ValueKind == JsonValueKind.Object)
+                {
+                    description = ExtractAdfText(descElem);
+                }
+
+                results.Add(new JiraIssueRef(key, description));
+            }
         }
 
-        return results;
+        // nextPageToken is absent on the last page.
+        string? token = null;
+        if (doc.RootElement.TryGetProperty("nextPageToken", out var tokenElem) &&
+            tokenElem.ValueKind == JsonValueKind.String)
+        {
+            token = tokenElem.GetString();
+        }
+
+        return new JiraSearchPage(results, token);
     }
 
     /// <inheritdoc/>

@@ -152,44 +152,64 @@ public sealed class JiraUpdater
 
     private async Task<Dictionary<int, string>?> BuildBitbucketIdMapAsync(CancellationToken ct)
     {
-        // Escape the repo URL for use in a JQL "~" (contains) search.
-        // We search for issues whose description contains the base path of the repo URL.
-        var repoPath = _settings.BitbucketRepoUrl.TrimEnd('/');
-        var jql = $"project = \"{_settings.ProjectKey}\" AND description ~ \"{repoPath}/issues\" ORDER BY created ASC";
-        _logger.LogDebug("Phase 1 JQL: {Jql}", jql);
+        // Phase 1 links a Bitbucket issue ID to a Jira key using one of two strategies,
+        // controlled by the "matchBy" setting in map.json:
+        //   serviceBlock — matches the "Bitbucket Issue ID: {id}" block written by this
+        //                  utility's CSV import.
+        //   url          — matches the "{bitbucketRepoUrl}/issues/{id}" URL written by
+        //                  Jira's native Bitbucket importer.
+        string searchPhrase;
+        Regex issuePattern;
 
-        // Build issue-number extraction pattern: .../issues/42
-        var issuePattern = new Regex(
-            Regex.Escape(repoPath) + @"/issues/(\d+)",
-            RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        if (_settings.MatchByIssueUrl)
+        {
+            var repoUrl = _settings.BitbucketRepoUrl.TrimEnd('/');
+
+            // The regex matches the full issue URL (with scheme) written by Jira's importer,
+            // e.g. https://bitbucket.org/org/repo/issues/1637/...
+            issuePattern = new Regex(
+                Regex.Escape(repoUrl) + @"/issues/(\d+)",
+                RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+            // For JQL, strip the scheme so the phrase does not contain Lucene-reserved
+            // characters (':' and '//'). The regex above does the precise filtering.
+            searchPhrase = $"{StripScheme(repoUrl)}/issues";
+        }
+        else
+        {
+            // Default: the service block written by CsvGenerator. This avoids URL-escaping
+            // issues in JQL and does not depend on bitbucketRepoUrl.
+            searchPhrase = "Bitbucket Issue ID";
+            issuePattern = new Regex(
+                @"Bitbucket Issue ID[:\s]+(\d+)",
+                RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        }
+
+        var jql = $"project = \"{_settings.ProjectKey}\" AND description ~ \"{searchPhrase}\" ORDER BY created ASC";
+        _logger.LogDebug("Phase 1 JQL (matchBy={Strategy}): {Jql}", _settings.MatchBy, jql);
 
         var map = new Dictionary<int, string>();
-        var startAt = 0;
+        string? nextPageToken = null;
         const int pageSize = 100;
 
         while (true)
         {
             ct.ThrowIfCancellationRequested();
 
-            List<JiraIssueRef> page;
+            JiraSearchPage page;
             try
             {
-                page = await _client.SearchAsync(jql, startAt, pageSize, ct).ConfigureAwait(false);
+                page = await _client.SearchAsync(jql, pageSize, nextPageToken, ct).ConfigureAwait(false);
             }
             catch (HttpRequestException ex)
             {
                 _logger.LogError(
-                    "Phase 1 search failed (startAt={StartAt}): {Message}",
-                    startAt, ex.Message);
+                    "Phase 1 search failed (nextPageToken={Token}): {Message}",
+                    nextPageToken ?? "(first page)", ex.Message);
                 return null;
             }
 
-            if (page.Count == 0)
-            {
-                break;
-            }
-
-            foreach (var issue in page)
+            foreach (var issue in page.Issues)
             {
                 var match = issuePattern.Match(issue.Description);
                 if (match.Success && int.TryParse(match.Groups[1].Value, out var bbId))
@@ -203,15 +223,23 @@ public sealed class JiraUpdater
                 }
             }
 
-            if (page.Count < pageSize)
+            // A null/empty token marks the last page.
+            if (string.IsNullOrEmpty(page.NextPageToken))
             {
                 break;
             }
 
-            startAt += pageSize;
+            nextPageToken = page.NextPageToken;
         }
 
         return map;
+    }
+
+    /// <summary>Removes the URL scheme (e.g. "https://") so the value is safe in a JQL phrase.</summary>
+    private static string StripScheme(string url)
+    {
+        var schemeIndex = url.IndexOf("://", StringComparison.Ordinal);
+        return schemeIndex >= 0 ? url[(schemeIndex + 3)..] : url;
     }
 
     // -------------------------------------------------------------------------

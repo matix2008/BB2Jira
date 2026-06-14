@@ -66,6 +66,7 @@ public static class MapGenerator
             Email            = "user@example.com",
             ApiToken         = "your_api_token_here",
             BitbucketRepoUrl = "https://bitbucket.org/yourorg/yourrepo",
+            MatchBy          = Models.Mapping.JiraSettings.MatchByServiceBlock,
             UpdateStatus     = true,
             UpdateComments   = true,
         };

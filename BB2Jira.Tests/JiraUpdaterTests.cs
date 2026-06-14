@@ -65,6 +65,19 @@ public class JiraUpdaterTests
         /// <summary>Key: BitbucketId, Value: Jira issue key to return in search.</summary>
         public Dictionary<int, string> IssueMap { get; } = new();
 
+        /// <summary>When set, the stub returns at most this many issues per page (token-based).</summary>
+        public int? PageSizeOverride { get; set; }
+
+        /// <summary>Number of times <see cref="SearchAsync"/> was invoked (one call per page).</summary>
+        public int SearchCalls { get; private set; }
+
+        /// <summary>
+        /// Builds the Jira description for a Bitbucket issue id. Defaults to the service-block
+        /// format; tests can override it to emulate Jira's native importer (URL) format.
+        /// </summary>
+        public Func<int, string> DescribeIssue { get; set; } =
+            id => $"Some text\r\n---\r\nImported from Bitbucket\r\nBitbucket Issue ID: {id}";
+
         public List<JiraTransition> Transitions { get; set; } =
             [new("10", "Open"), new("20", "In Progress"), new("30", "Done")];
 
@@ -77,16 +90,23 @@ public class JiraUpdaterTests
         public Task<bool> TestConnectionAsync(CancellationToken ct = default)
             => Task.FromResult(ConnectionOk);
 
-        public Task<List<JiraIssueRef>> SearchAsync(string jql, int startAt, int maxResults, CancellationToken ct = default)
+        public Task<JiraSearchPage> SearchAsync(string jql, int maxResults, string? nextPageToken, CancellationToken ct = default)
         {
-            var refs = IssueMap
-                .Select(kv => new JiraIssueRef(
-                    kv.Value,
-                    $"Some text\nImported from https://bitbucket.org/org/repo/issues/{kv.Key}"))
-                .Skip(startAt)
-                .Take(maxResults)
+            SearchCalls++;
+
+            // The token encodes the next start offset; null means the first page.
+            var start = string.IsNullOrEmpty(nextPageToken) ? 0 : int.Parse(nextPageToken);
+            var pageSize = PageSizeOverride ?? maxResults;
+
+            var all = IssueMap
+                .Select(kv => new JiraIssueRef(kv.Value, DescribeIssue(kv.Key)))
                 .ToList();
-            return Task.FromResult(refs);
+
+            var pageItems = all.Skip(start).Take(pageSize).ToList();
+            var nextStart = start + pageItems.Count;
+            var token = nextStart < all.Count ? nextStart.ToString() : null;
+
+            return Task.FromResult(new JiraSearchPage(pageItems, token));
         }
 
         public Task<List<JiraTransition>> GetTransitionsAsync(string issueKey, CancellationToken ct = default)
@@ -321,5 +341,85 @@ public class JiraUpdaterTests
 
         Assert.True(result);
         Assert.False(File.Exists(progressPath));
+    }
+
+    // -------------------------------------------------------------------------
+    // Search pagination (token-based)
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task WhenSearchSpansMultiplePagesThenAllIssuesMapped()
+    {
+        var client = new StubClient { PageSizeOverride = 2 };
+        for (var i = 1; i <= 5; i++)
+        {
+            client.IssueMap[i] = $"PROJ-{i}";
+        }
+
+        var rows = Enumerable.Range(1, 5)
+            .Select(i => MakeRow(i, status: "Open"))
+            .ToArray();
+        var csv = WriteTempCsv(MakeCsv(rows));
+
+        var updater = new JiraUpdater(client, DefaultSettings(), Logger());
+        var result = await updater.RunAsync(csv, TempFile());
+
+        Assert.True(result);
+        // 5 issues across pages of 2 => 3 search calls (2 + 2 + 1).
+        Assert.Equal(3, client.SearchCalls);
+        // Every issue must have been transitioned, proving all pages were mapped.
+        for (var i = 1; i <= 5; i++)
+        {
+            Assert.Contains($"PROJ-{i}:10", client.AppliedTransitions);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Match strategy (serviceBlock vs url)
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task WhenMatchByUrlThenIssuesMatchedFromBitbucketUrl()
+    {
+        var settings = DefaultSettings();
+        settings.MatchBy = JiraSettings.MatchByUrl;
+        settings.BitbucketRepoUrl = "https://bitbucket.org/org/repo";
+
+        var client = new StubClient
+        {
+            // Emulate Jira's native Bitbucket importer description (URL, no service block).
+            DescribeIssue = id =>
+                $"<p>Imported from {settings.BitbucketRepoUrl}/issues/{id}/some-slug</p>",
+        };
+        client.IssueMap[1637] = "CT-1";
+        var csv = WriteTempCsv(MakeCsv(MakeRow(1637, status: "Open")));
+
+        var updater = new JiraUpdater(client, settings, Logger());
+        var result = await updater.RunAsync(csv, TempFile());
+
+        Assert.True(result);
+        Assert.Contains("CT-1:10", client.AppliedTransitions);
+    }
+
+    [Fact]
+    public async Task WhenMatchByServiceBlockThenUrlOnlyDescriptionNotMatched()
+    {
+        // Default strategy is serviceBlock; a URL-only description must not match.
+        var settings = DefaultSettings();
+        settings.BitbucketRepoUrl = "https://bitbucket.org/org/repo";
+
+        var client = new StubClient
+        {
+            DescribeIssue = id =>
+                $"<p>Imported from {settings.BitbucketRepoUrl}/issues/{id}/some-slug</p>",
+        };
+        client.IssueMap[1637] = "CT-1";
+        var csv = WriteTempCsv(MakeCsv(MakeRow(1637, status: "Open")));
+
+        var updater = new JiraUpdater(client, settings, Logger());
+        var result = await updater.RunAsync(csv, TempFile());
+
+        Assert.True(result);
+        Assert.Empty(client.AppliedTransitions);
     }
 }

@@ -97,9 +97,18 @@ maintained so interrupted runs can continue from where they left off.
 
 ### How issues are matched
 
-The utility searches Jira for issues whose `description` contains the Bitbucket issue URL
-(`{bitbucketRepoUrl}/issues/{id}`). The Bitbucket issue number is extracted from that URL
-and matched against the `Bitbucket Issue ID` column in `import.csv`.
+Phase 1 searches the Jira project and builds a `Bitbucket Issue ID -> Jira key` map.
+The `matchBy` setting in `map.json` selects how the link is detected in each Jira
+issue `description`:
+
+| `matchBy` | Looks for | Use when |
+|---|---|---|
+| `serviceBlock` (default) | `Bitbucket Issue ID: {id}` | Issues were imported from `import.csv` by this utility |
+| `url` | `{bitbucketRepoUrl}/issues/{id}` | Issues were imported by Jira's native Bitbucket importer |
+
+The Bitbucket issue number is extracted from the matched text and compared with the
+`Bitbucket Issue ID` column in `import.csv`. `bitbucketRepoUrl` is only required when
+`matchBy` is `url`.
 
 ### Comment format
 
@@ -119,10 +128,13 @@ Generated automatically by `-m` with placeholder values. Fill in before running 
   "email": "user@example.com",
   "apiToken": "your_api_token_here",
   "bitbucketRepoUrl": "https://bitbucket.org/yourorg/yourrepo",
+  "matchBy": "serviceBlock",
   "updateStatus": true,
   "updateComments": true
 }
 ```
+
+`matchBy` accepts `serviceBlock` (default) or `url` — see [How issues are matched](#how-issues-are-matched).
 
 ### Exit codes
 

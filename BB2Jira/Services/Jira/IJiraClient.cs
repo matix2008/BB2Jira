@@ -3,6 +3,12 @@ namespace BB2Jira.Services.Jira;
 /// <summary>A Jira issue reference returned by a search query.</summary>
 public sealed record JiraIssueRef(string Key, string Description);
 
+/// <summary>
+/// One page of JQL search results.
+/// <see cref="NextPageToken"/> is null when there are no further pages.
+/// </summary>
+public sealed record JiraSearchPage(IReadOnlyList<JiraIssueRef> Issues, string? NextPageToken);
+
 /// <summary>A workflow transition available for a Jira issue.</summary>
 public sealed record JiraTransition(string Id, string Name);
 
@@ -23,9 +29,11 @@ public interface IJiraClient
 
     /// <summary>
     /// Executes a JQL search and returns one page of issue references.
+    /// Pagination uses Jira Cloud's token-based model: pass <paramref name="nextPageToken"/>
+    /// as null for the first page, then the token returned by the previous page.
     /// Each reference contains the issue key and its raw description text.
     /// </summary>
-    Task<List<JiraIssueRef>> SearchAsync(string jql, int startAt, int maxResults, CancellationToken ct = default);
+    Task<JiraSearchPage> SearchAsync(string jql, int maxResults, string? nextPageToken, CancellationToken ct = default);
 
     /// <summary>Returns all workflow transitions currently available for the given issue.</summary>
     Task<List<JiraTransition>> GetTransitionsAsync(string issueKey, CancellationToken ct = default);
