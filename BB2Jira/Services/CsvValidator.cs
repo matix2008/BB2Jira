@@ -42,21 +42,30 @@ public static class CsvValidator
         var stats = new ValidationStats();
 
         // Check 1: file exists and is readable UTF-8.
-        if (!TryReadFile(csvPath, logger, out var rawText))
+        (var e0, var w0) = (stats.ErrorCount, stats.WarningCount);
+        var fileOk = TryReadFile(csvPath, logger, stats, out var rawText);
+        ReportCheck(logger, 1, "File exists and readable UTF-8", stats.ErrorCount - e0, stats.WarningCount - w0);
+        if (!fileOk)
         {
             WriteSummary(logger, stats, hasErrors: true);
             return false;
         }
 
         // Check 2: parse CSV; verify balanced quotes and uniform column count.
-        if (!TryParseCsv(rawText!, logger, stats, out var rows))
+        (e0, w0) = (stats.ErrorCount, stats.WarningCount);
+        var parseOk = TryParseCsv(rawText!, logger, stats, out var rows);
+        ReportCheck(logger, 2, "CSV syntax (RFC 4180, balanced quotes, uniform columns)", stats.ErrorCount - e0, stats.WarningCount - w0);
+        if (!parseOk)
         {
             WriteSummary(logger, stats, hasErrors: true);
             return false;
         }
 
         // Check 3: header row must contain all required columns in the right order.
-        if (!ValidateHeader(rows[0], logger, stats, out var colIndex))
+        (e0, w0) = (stats.ErrorCount, stats.WarningCount);
+        var headerOk = ValidateHeader(rows![0], logger, stats, out var colIndex);
+        ReportCheck(logger, 3, "Header columns present and in correct order", stats.ErrorCount - e0, stats.WarningCount - w0);
+        if (!headerOk)
         {
             WriteSummary(logger, stats, hasErrors: true);
             return false;
@@ -66,24 +75,42 @@ public static class CsvValidator
         logger.LogInformation("Data rows: {RowCount}", dataRows.Count);
 
         // Check 4: required fields must not be empty (Issue Type, Summary, Status → error).
+        (e0, w0) = (stats.ErrorCount, stats.WarningCount);
         ValidateRequiredFields(dataRows, colIndex, logger, stats);
+        ReportCheck(logger, 4, "Required fields not empty (Issue Type, Summary, Status)", stats.ErrorCount - e0, stats.WarningCount - w0);
 
         // Check 5: date fields must match the expected format.
+        (e0, w0) = (stats.ErrorCount, stats.WarningCount);
         ValidateDates(dataRows, colIndex, logger, stats);
+        ReportCheck(logger, 5, "Date format (Created, Updated) matches yyyy-MM-dd HH:mm:ss", stats.ErrorCount - e0, stats.WarningCount - w0);
 
         // Check 6: Bitbucket Issue ID must be unique.
+        (e0, w0) = (stats.ErrorCount, stats.WarningCount);
         ValidateUniqueIds(dataRows, colIndex, logger, stats);
+        ReportCheck(logger, 6, "Bitbucket Issue ID uniqueness", stats.ErrorCount - e0, stats.WarningCount - w0);
 
         // Check 7 (when export is provided): every export issue must appear in the CSV.
+        (e0, w0) = (stats.ErrorCount, stats.WarningCount);
         if (export is not null)
         {
             ValidateAgainstExport(dataRows, colIndex, export, logger, stats);
+            ReportCheck(logger, 7, "All export issues present in CSV", stats.ErrorCount - e0, stats.WarningCount - w0);
+        }
+        else
+        {
+            ReportCheck(logger, 7, "All export issues present in CSV", 0, 0, skipped: true);
         }
 
         // Check 8 (when map is provided): Issue Type must be a valid value from map.json kind.
+        (e0, w0) = (stats.ErrorCount, stats.WarningCount);
         if (map is not null)
         {
             ValidateIssueTypes(dataRows, colIndex, map, logger, stats);
+            ReportCheck(logger, 8, "Issue Type values in map.json kind", stats.ErrorCount - e0, stats.WarningCount - w0);
+        }
+        else
+        {
+            ReportCheck(logger, 8, "Issue Type values in map.json kind", 0, 0, skipped: true);
         }
 
         var hasErrors = stats.ErrorCount > 0;
@@ -95,12 +122,13 @@ public static class CsvValidator
     // Check 1: file read
     // -------------------------------------------------------------------------
 
-    private static bool TryReadFile(string path, ILogger logger, out string? text)
+    private static bool TryReadFile(string path, ILogger logger, ValidationStats stats, out string? text)
     {
         text = null;
         if (!File.Exists(path))
         {
             logger.LogError("File not found: {Path}", path);
+            stats.ErrorCount++;
             return false;
         }
 
@@ -114,6 +142,7 @@ public static class CsvValidator
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             logger.LogError("Cannot read file: {Message}", ex.Message);
+            stats.ErrorCount++;
             return false;
         }
     }
@@ -442,6 +471,43 @@ public static class CsvValidator
         else
         {
             logger.LogDebug("All Issue Type values match map.json kind mappings.");
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Per-check result line
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Logs a single summary line for check <paramref name="number"/> of 8
+    /// after all per-issue messages for that check have been emitted.
+    /// </summary>
+    private static void ReportCheck(
+        ILogger logger,
+        int number,
+        string description,
+        int errorsDelta,
+        int warnsDelta,
+        bool skipped = false)
+    {
+        const int total = 8;
+        if (skipped)
+        {
+            logger.LogInformation("[{Number}/{Total}] {Description} -- SKIPPED", number, total, description);
+            return;
+        }
+
+        if (errorsDelta > 0)
+        {
+            logger.LogError("[{Number}/{Total}] {Description} -- {Count} error(s)", number, total, description, errorsDelta);
+        }
+        else if (warnsDelta > 0)
+        {
+            logger.LogWarning("[{Number}/{Total}] {Description} -- {Count} warning(s)", number, total, description, warnsDelta);
+        }
+        else
+        {
+            logger.LogInformation("[{Number}/{Total}] {Description} -- OK", number, total, description);
         }
     }
 
