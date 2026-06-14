@@ -554,4 +554,84 @@ public class CsvValidatorTests
         Assert.True(result);
         Assert.False(logger.HasWarning("Unknown column"));
     }
+
+    // -------------------------------------------------------------------------
+    // Check 11: no hidden or control characters in column names (error-level)
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public void Validate_BomInColumnName_ReturnsFalseWithError()
+    {
+        // Insert a BOM character inside the "Summary" column name.
+        var header = "Issue Type,\uFEFFSummary,Description,Status,Priority,Reporter,Assignee,Created,Updated,Fix Version/s,Bitbucket Milestone,Bitbucket Issue ID";
+        var csv = header + "\r\n";
+        var path = WriteTempCsv(csv);
+        var logger = new CapturingLogger();
+
+        var result = CsvValidator.Validate(path, logger);
+
+        Assert.False(result);
+        Assert.True(logger.HasError("hidden"));
+    }
+
+    [Fact]
+    public void Validate_TabInColumnName_ReturnsFalseWithError()
+    {
+        var header = "Issue Type,Sum\tmary,Description,Status,Priority,Reporter,Assignee,Created,Updated,Fix Version/s,Bitbucket Milestone,Bitbucket Issue ID";
+        var csv = header + "\r\n";
+        var path = WriteTempCsv(csv);
+        var logger = new CapturingLogger();
+
+        var result = CsvValidator.Validate(path, logger);
+
+        Assert.False(result);
+        Assert.True(logger.HasError("hidden"));
+    }
+
+    [Fact]
+    public void Validate_NonBreakingSpaceInColumnName_ReturnsFalseWithError()
+    {
+        // U+00A0 non-breaking space inside a column name.
+        var header = "Issue\u00A0Type,Summary,Description,Status,Priority,Reporter,Assignee,Created,Updated,Fix Version/s,Bitbucket Milestone,Bitbucket Issue ID";
+        var csv = header + "\r\n";
+        var path = WriteTempCsv(csv);
+        var logger = new CapturingLogger();
+
+        var result = CsvValidator.Validate(path, logger);
+
+        Assert.False(result);
+        Assert.True(logger.HasError("hidden"));
+    }
+
+    [Fact]
+    public void Validate_CleanColumnNames_PassesCheck11()
+    {
+        var csv = MakeCsv(MakeRow());
+        var path = WriteTempCsv(csv);
+        var logger = new CapturingLogger();
+
+        var result = CsvValidator.Validate(path, logger);
+
+        Assert.True(result);
+        Assert.False(logger.HasError("hidden"));
+    }
+
+    // -------------------------------------------------------------------------
+    // Checks 9/10/11 run even when check 3 fails
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public void Validate_HiddenCharAndMissingColumn_ReportsBothErrors()
+    {
+        // Header has a BOM in a column name AND is missing "Status".
+        var header = "\uFEFFIssue Type,Summary,Description,Priority,Reporter,Assignee,Created,Updated,Fix Version/s,Bitbucket Milestone,Bitbucket Issue ID";
+        var csv = header + "\r\n";
+        var path = WriteTempCsv(csv);
+        var logger = new CapturingLogger();
+
+        CsvValidator.Validate(path, logger);
+
+        Assert.True(logger.HasError("Status"));
+        Assert.True(logger.HasError("hidden"));
+    }
 }

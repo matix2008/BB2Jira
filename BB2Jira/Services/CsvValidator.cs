@@ -62,9 +62,27 @@ public static class CsvValidator
         }
 
         // Check 3: header row must contain all required columns in the right order.
+        // Checks 9, 10, 11 inspect the same header row and must run regardless of whether
+        // check 3 passes, so they are executed before the early-exit.
         (e0, w0) = (stats.ErrorCount, stats.WarningCount);
         var headerOk = ValidateHeader(rows![0], logger, stats, out var colIndex);
         ReportCheck(logger, 3, "Header columns present and in correct order", stats.ErrorCount - e0, stats.WarningCount - w0);
+
+        // Check 9: no duplicate column names in header.
+        (e0, w0) = (stats.ErrorCount, stats.WarningCount);
+        ValidateDuplicateColumns(rows![0], logger, stats);
+        ReportCheck(logger, 9, "No duplicate column names in header", stats.ErrorCount - e0, stats.WarningCount - w0);
+
+        // Check 10: no unknown column names in header.
+        (e0, w0) = (stats.ErrorCount, stats.WarningCount);
+        ValidateUnknownColumns(rows![0], logger, stats);
+        ReportCheck(logger, 10, "No unknown columns outside BaseColumns + Comment", stats.ErrorCount - e0, stats.WarningCount - w0);
+
+        // Check 11: no hidden or control characters in column names.
+        (e0, w0) = (stats.ErrorCount, stats.WarningCount);
+        ValidateHiddenChars(rows![0], logger, stats);
+        ReportCheck(logger, 11, "No hidden or control characters in column names", stats.ErrorCount - e0, stats.WarningCount - w0);
+
         if (!headerOk)
         {
             WriteSummary(logger, stats, hasErrors: true);
@@ -112,16 +130,6 @@ public static class CsvValidator
         {
             ReportCheck(logger, 8, "Issue Type values in map.json kind", 0, 0, skipped: true);
         }
-
-        // Check 9: no duplicate column names in header.
-        (e0, w0) = (stats.ErrorCount, stats.WarningCount);
-        ValidateDuplicateColumns(rows![0], logger, stats);
-        ReportCheck(logger, 9, "No duplicate column names in header", stats.ErrorCount - e0, stats.WarningCount - w0);
-
-        // Check 10: no unknown column names in header.
-        (e0, w0) = (stats.ErrorCount, stats.WarningCount);
-        ValidateUnknownColumns(rows![0], logger, stats);
-        ReportCheck(logger, 10, "No unknown columns outside BaseColumns + Comment", stats.ErrorCount - e0, stats.WarningCount - w0);
 
         var hasErrors = stats.ErrorCount > 0;
         WriteSummary(logger, stats, hasErrors);
@@ -485,6 +493,47 @@ public static class CsvValidator
     }
 
     // -------------------------------------------------------------------------
+    // Check 11: no hidden or control characters in column names
+    // -------------------------------------------------------------------------
+
+    private static void ValidateHiddenChars(
+        List<string> header,
+        ILogger logger,
+        ValidationStats stats)
+    {
+        // Characters that are invisible but can corrupt column name matching:
+        // U+FEFF BOM, U+0009 tab, U+000D CR, U+000A LF,
+        // U+00A0 non-breaking space, U+200B zero-width space,
+        // U+200C/D zero-width non-joiner/joiner, U+FFFE/FFFF non-characters.
+        static bool HasHidden(string s) => s.Any(c =>
+            c == '\uFEFF' || c == '\t'  || c == '\r'  || c == '\n' ||
+            c == '\u00A0' || c == '\u200B' || c == '\u200C' || c == '\u200D' ||
+            c == '\uFFFE' || c == '\uFFFF');
+
+        for (var i = 0; i < header.Count; i++)
+        {
+            if (HasHidden(header[i]))
+            {
+                // Show printable repr: escape non-printable chars as \uXXXX.
+                var escaped = string.Concat(header[i].Select(c =>
+                    c < ' ' || c == '\uFEFF' || c >= '\u007F'
+                        ? $@"\u{(int)c:X4}"
+                        : c.ToString()));
+
+                logger.LogError(
+                    "Column {Index} contains hidden or control characters: '{Escaped}'",
+                    i, escaped);
+                stats.ErrorCount++;
+            }
+        }
+
+        if (stats.ErrorCount == 0)
+        {
+            logger.LogDebug("No hidden characters found in column names.");
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // Check 9: no duplicate column names in header
     // -------------------------------------------------------------------------
 
@@ -570,7 +619,7 @@ public static class CsvValidator
         int warnsDelta,
         bool skipped = false)
     {
-        const int total = 10;
+        const int total = 11;
         if (skipped)
         {
             logger.LogInformation("[{Number}/{Total}] {Description} -- SKIPPED", number, total, description);

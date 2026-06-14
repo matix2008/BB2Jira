@@ -87,7 +87,7 @@ The `-k` key checks an existing `import.csv` and writes a log to `import-check.l
 |---|-------|----------|--------|
 | 1 | File exists and is readable UTF-8 | Error | Yes |
 | 2 | CSV is syntactically valid (RFC 4180, balanced quotes, uniform column count) | Error | Yes |
-| 3 | Header row contains all required columns in the correct order | Error | Yes |
+| 3 | Header row contains all required columns in the correct order | Error | No* |
 | 4 | Required fields (`Issue Type`, `Summary`, `Status`) are not empty | Error | No |
 | 5 | `Created` / `Updated` match format `yyyy-MM-dd HH:mm:ss` | Warning | No |
 | 6 | `Bitbucket Issue ID` values are unique | Warning | No |
@@ -95,6 +95,9 @@ The `-k` key checks an existing `import.csv` and writes a log to `import-check.l
 | 8 | *(when `-m` is resolvable)* `Issue Type` values match the `kind` map | Warning | No |
 | 9 | No duplicate column names in the header | Error | No |
 | 10 | No columns outside the allowed set (`BaseColumns` + `Comment*`) | Warning | No |
+| 11 | No hidden or control characters in column names (`BOM`, `\t`, `\r`, `\n`, `\u00A0`, zero-width chars) | Error | No |
+
+\* Checks 9, 10, and 11 always run on the same header row. If check 3 fails, data-row checks (4–8) are skipped but the header checks complete first.
 
 ### Exit codes
 
