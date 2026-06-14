@@ -14,6 +14,9 @@ public enum AppMode
 
     /// <summary>Validate an existing import.csv (-k key).</summary>
     ValidateCsv,
+
+    /// <summary>Update Jira issues via API (-u key).</summary>
+    UpdateJira,
 }
 
 /// <summary>
@@ -118,6 +121,11 @@ public sealed class CliOptions
                     options.Mode = AppMode.ValidateCsv;
                     break;
 
+                case "-u":
+                case "--update":
+                    options.Mode = AppMode.UpdateJira;
+                    break;
+
                 default:
                     options._errors.Add($"Unknown argument: {arg}");
                     break;
@@ -164,8 +172,17 @@ public sealed class CliOptions
 
                 break;
 
+            case AppMode.UpdateJira:
+                // In update mode -o is the CSV to read; -m provides map.json with Jira settings.
+                if (!outputExplicit)
+                {
+                    options.OutputPath = DefaultCsvPath;
+                }
+
+                break;
+
             case AppMode.None:
-                options._errors.Add("No operation mode specified. Use -m (map.json), -c (import.csv), or -k (validate import.csv).");
+                options._errors.Add("No operation mode specified. Use -m (map.json), -c (import.csv), -k (validate import.csv), or -u (update Jira).");
                 break;
         }
     }
@@ -194,12 +211,14 @@ public sealed class CliOptions
           BB2Jira -m [-i db-2.0.json] [-o map.json]
           BB2Jira -c -i db-2.0.json -m map.json -o import.csv
           BB2Jira -k [-o import.csv] [-i db-2.0.json] [-m map.json]
+          BB2Jira -u [-o import.csv] [-m map.json]
 
         Keys:
-          -m, --map     generate map.json mode (without -c);
-                        path to map.json (together with -c or -k)
+          -m, --map     generate map.json mode (without -c/-k/-u);
+                        path to map.json (together with -c, -k or -u)
           -c, --csv     generate import.csv mode
           -k, --check   validate an existing import.csv
+          -u, --update  update Jira issues via API
           -i, --input   path to the Bitbucket export file (db-2.0.json)
           -o, --output  path to the result (map.json or import.csv)
           -v, --verbose show per-issue diagnostics on the console

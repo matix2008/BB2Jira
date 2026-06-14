@@ -58,6 +58,18 @@ public static class MapGenerator
         BuildMilestone(export, existing, map);
         BuildVersion(export, existing, map);
 
+        // Preserve the existing jira section if present; otherwise emit a stub with placeholder values.
+        map.Jira = existing.Jira ?? new Models.Mapping.JiraSettings
+        {
+            BaseUrl          = "https://yoursite.atlassian.net",
+            ProjectKey       = "PROJ",
+            Email            = "user@example.com",
+            ApiToken         = "your_api_token_here",
+            BitbucketRepoUrl = "https://bitbucket.org/yourorg/yourrepo",
+            UpdateStatus     = true,
+            UpdateComments   = true,
+        };
+
         return map;
     }
 

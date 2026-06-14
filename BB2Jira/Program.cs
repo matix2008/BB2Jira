@@ -1,6 +1,7 @@
 using System.Reflection;
 using BB2Jira.Cli;
 using BB2Jira.Services;
+using BB2Jira.Services.Jira;
 using Microsoft.Extensions.Logging;
 using Serilog;
 
@@ -31,6 +32,7 @@ return options.Mode switch
     AppMode.GenerateMap => RunGenerateMap(options),
     AppMode.GenerateCsv => RunGenerateCsv(options),
     AppMode.ValidateCsv => RunValidateCsv(options),
+    AppMode.UpdateJira  => RunUpdateJira(options),
     _ => 2,
 };
 
@@ -135,6 +137,55 @@ static int RunValidateCsv(CliOptions options)
         }
 
         var passed = CsvValidator.Validate(options.OutputPath, logger, export, map);
+        return passed ? 0 : 2;
+    }
+    catch (Exception ex) when (ex is FileNotFoundException or InvalidDataException)
+    {
+        logger.LogError("{Message}", ex.Message);
+        return 1;
+    }
+}
+
+static int RunUpdateJira(CliOptions options)
+{
+    var csvPath = options.OutputPath;
+    var logPath = Path.Combine(
+        Path.GetDirectoryName(Path.GetFullPath(csvPath)) ?? string.Empty,
+        "import-update.log");
+    var progressPath = Path.Combine(
+        Path.GetDirectoryName(Path.GetFullPath(csvPath)) ?? string.Empty,
+        "import-update.progress");
+
+    using var loggerFactory = CreateLoggerFactory(logPath, options.Verbose);
+    var logger = loggerFactory.CreateLogger("BB2Jira");
+
+    logger.LogInformation("Mode: update Jira");
+    logger.LogInformation("CSV file: {CsvPath}", csvPath);
+    logger.LogInformation("Mapping file: {MapPath}", options.MapPath);
+
+    // CSV must exist before we do anything.
+    if (!File.Exists(csvPath))
+    {
+        logger.LogError("import.csv not found: {CsvPath}", csvPath);
+        return 1;
+    }
+
+    try
+    {
+        var map = MapLoader.Load(options.MapPath);
+
+        if (map.Jira is null || !map.Jira.IsConfigured)
+        {
+            logger.LogError(
+                "The 'jira' section in map.json is missing or incomplete. "
+                + "Fill in baseUrl, projectKey, email, apiToken and bitbucketRepoUrl.");
+            return 1;
+        }
+
+        using var client = new JiraClient(map.Jira, logger);
+        var updater = new JiraUpdater(client, map.Jira, logger);
+
+        var passed = updater.RunAsync(csvPath, progressPath).GetAwaiter().GetResult();
         return passed ? 0 : 2;
     }
     catch (Exception ex) when (ex is FileNotFoundException or InvalidDataException)

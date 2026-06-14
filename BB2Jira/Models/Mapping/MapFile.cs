@@ -25,4 +25,8 @@ public sealed class MapFile
 
     [JsonPropertyName("version")]
     public SortedDictionary<string, string> Version { get; set; } = new(StringComparer.Ordinal);
+
+    /// <summary>Jira connection settings for the -u update mode. Null when not configured.</summary>
+    [JsonPropertyName("jira")]
+    public JiraSettings? Jira { get; set; }
 }

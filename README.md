@@ -35,6 +35,9 @@ BB2Jira -c -i db-2.0.json -m map.json -o import.csv
 
 # Validate an existing import.csv
 BB2Jira -k [-o import.csv] [-i db-2.0.json] [-m map.json]
+
+# Update Jira issues via API
+BB2Jira -u [-o import.csv] [-m map.json]
 ```
 
 When run from source you can use:
@@ -47,15 +50,16 @@ dotnet run --project BB2Jira -- -m -i db-2.0.json -o map.json
 
 ## Command-line options
 
-| Key            | Description                                                                   |
-| -------------- | ----------------------------------------------------------------------------- |
-| `-m`, `--map`  | Generate `map.json` (without `-c`/`-k`); path to `map.json` (with `-c`/`-k`) |
-| `-c`, `--csv`  | Generate `import.csv`                                                          |
-| `-k`, `--check`| Validate an existing `import.csv`                                              |
-| `-i`, `--input`| Path to the Bitbucket export file (`db-2.0.json`)                             |
-| `-o`, `--output`| Path to the result (`map.json` or `import.csv`)                              |
-| `-v`, `--verbose`| Show per-issue diagnostics on the console                                   |
-| `-h`, `--help` | Show help                                                                     |
+| Key            | Description                                                                          |
+| -------------- | ------------------------------------------------------------------------------------ |
+| `-m`, `--map`  | Generate `map.json` (without `-c`/`-k`/`-u`); path to `map.json` (with `-c`/`-k`/`-u`) |
+| `-c`, `--csv`  | Generate `import.csv`                                                                 |
+| `-k`, `--check`| Validate an existing `import.csv`                                                     |
+| `-u`, `--update`| Update Jira issues via API                                                           |
+| `-i`, `--input`| Path to the Bitbucket export file (`db-2.0.json`)                                    |
+| `-o`, `--output`| Path to the result (`map.json` or `import.csv`)                                     |
+| `-v`, `--verbose`| Show per-issue diagnostics on the console                                            |
+| `-h`, `--help` | Show help                                                                             |
 
 The utility prints a version and copyright banner on every launch, including when
 showing help.
@@ -67,12 +71,66 @@ showing help.
 | `-m` | `db-2.0.json`                 | `map.json`   |
 | `-c` | `db-2.0.json` + `map.json`    | `import.csv` |
 | `-k` | `import.csv` (+ optional `db-2.0.json` and `map.json`) | `import.csv` (checked) |
+| `-u` | `import.csv` + `map.json` (with `jira` section filled) | Jira updated in place |
 
 The `-m` key is overloaded:
 
 - **without `-c`** it selects the `map.json` generation mode;
 - **together with `-c`** it provides the path to an existing `map.json`;
-- **together with `-k`** it provides the path to `map.json` for cross-reference validation.
+- **together with `-k`** it provides the path to `map.json` for cross-reference validation;
+- **together with `-u`** it provides the path to `map.json` containing the `jira` section.
+
+---
+
+## Jira update (`-u`)
+
+The `-u` key reads `import.csv` and updates matching Jira issues via the REST API v3.
+Logs are written to `import-update.log`. A resume file `import-update.progress` is
+maintained so interrupted runs can continue from where they left off.
+
+### What is updated
+
+| Field | Condition |
+|---|---|
+| Status | When `updateStatus: true` in `map.json` — applied via workflow transition |
+| Comments | When `updateComments: true` — adds comments whose date is later than the latest existing Jira comment |
+
+### How issues are matched
+
+The utility searches Jira for issues whose `description` contains the Bitbucket issue URL
+(`{bitbucketRepoUrl}/issues/{id}`). The Bitbucket issue number is extracted from that URL
+and matched against the `Bitbucket Issue ID` column in `import.csv`.
+
+### Comment format
+
+Comments are stored in Jira as plain-text ADF paragraphs:
+```
+2024-01-15 10:00:00 | John Doe | Original comment text
+```
+
+### `jira` section in `map.json`
+
+Generated automatically by `-m` with placeholder values. Fill in before running `-u`:
+
+```json
+"jira": {
+  "baseUrl": "https://yoursite.atlassian.net",
+  "projectKey": "PROJ",
+  "email": "user@example.com",
+  "apiToken": "your_api_token_here",
+  "bitbucketRepoUrl": "https://bitbucket.org/yourorg/yourrepo",
+  "updateStatus": true,
+  "updateComments": true
+}
+```
+
+### Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | All issues processed successfully |
+| `1` | Fatal error (CSV not found, Jira unreachable, missing config) |
+| `2` | Partial errors (some transitions failed; processing continued) |
 
 ---
 
