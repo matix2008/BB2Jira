@@ -54,6 +54,37 @@ public class JiraUpdaterTests
 
     private static ILogger Logger() => NullLogger.Instance;
 
+    // Captures log messages so tests can assert on update output.
+    private sealed class CapturingLogger : ILogger
+    {
+        public List<(LogLevel Level, string Message)> Entries { get; } = new();
+
+        public IDisposable BeginScope<TState>(TState state) where TState : notnull
+            => NullScope.Instance;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            Entries.Add((logLevel, formatter(state, exception)));
+        }
+
+        public bool HasInformation(string fragment) =>
+            Entries.Any(e => e.Level == LogLevel.Information &&
+                             e.Message.Contains(fragment, StringComparison.OrdinalIgnoreCase));
+
+        private sealed class NullScope : IDisposable
+        {
+            public static readonly NullScope Instance = new();
+            public void Dispose() { }
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Stub IJiraClient
     // -------------------------------------------------------------------------
@@ -421,5 +452,93 @@ public class JiraUpdaterTests
 
         Assert.True(result);
         Assert.Empty(client.AppliedTransitions);
+    }
+
+    // -------------------------------------------------------------------------
+    // Logging of comment additions (problem #1)
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task WhenCommentAddedThenInformationIsLogged()
+    {
+        var logger = new CapturingLogger();
+        var client = new StubClient();
+        client.IssueMap[1] = "PROJ-1";
+        var comment = "2024-06-01 10:00:00;acc123;Hello world";
+        var csv = WriteTempCsv(MakeCsv(MakeRow(1, comment: comment)));
+
+        var updater = new JiraUpdater(client, DefaultSettings(), logger);
+        await updater.RunAsync(csv, TempFile());
+
+        Assert.True(logger.HasInformation("comment added"));
+    }
+
+    [Fact]
+    public async Task WhenCommentsAddedThenSummaryReportsCount()
+    {
+        var logger = new CapturingLogger();
+        var client = new StubClient();
+        client.IssueMap[1] = "PROJ-1";
+        var comment = "2024-06-01 10:00:00;acc123;Hello world";
+        var csv = WriteTempCsv(MakeCsv(MakeRow(1, comment: comment)));
+
+        var updater = new JiraUpdater(client, DefaultSettings(), logger);
+        await updater.RunAsync(csv, TempFile());
+
+        Assert.True(logger.HasInformation("Comments added: 1"));
+    }
+
+    // -------------------------------------------------------------------------
+    // Resume after failure (problem #2)
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task WhenIssueFailsThenProgressDoesNotAdvancePastIt()
+    {
+        var client = new StubClient();
+        client.IssueMap[1] = "PROJ-1";
+        client.IssueMap[2] = "PROJ-2";
+        client.IssueMap[3] = "PROJ-3";
+
+        // BB#2 has a status with no matching transition => it fails.
+        var csv = WriteTempCsv(MakeCsv(
+            MakeRow(1, status: "Open"),
+            MakeRow(2, status: "NonExistentStatus"),
+            MakeRow(3, status: "Open")));
+
+        var progressPath = TempFile();
+        var updater = new JiraUpdater(client, DefaultSettings(), Logger());
+        var result = await updater.RunAsync(csv, progressPath);
+
+        Assert.False(result);
+        // Watermark must stay at the last consecutively-successful issue (BB#1),
+        // so the failed BB#2 is retried on the next run.
+        Assert.True(File.Exists(progressPath));
+        Assert.Contains("last_processed=1", File.ReadAllText(progressPath));
+    }
+
+    [Fact]
+    public async Task WhenFailedIssueRetriedOnNextRunThenItIsProcessed()
+    {
+        var client = new StubClient();
+        client.IssueMap[1] = "PROJ-1";
+        client.IssueMap[2] = "PROJ-2";
+
+        // First run: BB#2 fails (unknown status) so progress stays at BB#1.
+        var failingCsv = WriteTempCsv(MakeCsv(
+            MakeRow(1, status: "Open"),
+            MakeRow(2, status: "NonExistentStatus")));
+        var progressPath = TempFile();
+        var updater = new JiraUpdater(client, DefaultSettings(), Logger());
+        await updater.RunAsync(failingCsv, progressPath);
+
+        // Second run: BB#2 now has a valid status and must be retried (not skipped).
+        var fixedCsv = WriteTempCsv(MakeCsv(
+            MakeRow(1, status: "Open"),
+            MakeRow(2, status: "Open")));
+        var result = await updater.RunAsync(fixedCsv, progressPath);
+
+        Assert.True(result);
+        Assert.Contains("PROJ-2:10", client.AppliedTransitions);
     }
 }

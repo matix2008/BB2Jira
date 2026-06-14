@@ -86,6 +86,8 @@ public sealed class JiraUpdater
         var stats = new UpdateStats();
         var hasErrors = false;
 
+        var watermarkBroken = false;
+
         foreach (var row in dataRows)
         {
             ct.ThrowIfCancellationRequested();
@@ -114,24 +116,39 @@ public sealed class JiraUpdater
 
             if (_settings.UpdateStatus)
             {
-                issueOk &= await UpdateStatusAsync(jiraKey, row, ct).ConfigureAwait(false);
-                if (!issueOk)
+                var (ok, changed) = await UpdateStatusAsync(jiraKey, row, ct).ConfigureAwait(false);
+                issueOk &= ok;
+                if (changed)
                 {
-                    hasErrors = true;
+                    stats.StatusUpdated++;
                 }
             }
 
             if (_settings.UpdateComments)
             {
-                var commentOk = await UpdateCommentsAsync(jiraKey, row, ct).ConfigureAwait(false);
-                if (!commentOk)
-                {
-                    hasErrors = true;
-                }
+                var (ok, added) = await UpdateCommentsAsync(jiraKey, row, ct).ConfigureAwait(false);
+                issueOk &= ok;
+                stats.CommentsAdded += added;
             }
 
-            stats.Processed++;
-            WriteProgress(progressPath, bbId);
+            if (issueOk)
+            {
+                stats.Processed++;
+
+                // Advance the resume watermark only while every issue so far has succeeded.
+                // Once an issue fails, stop advancing so the next run retries from that issue
+                // instead of skipping it.
+                if (!watermarkBroken)
+                {
+                    WriteProgress(progressPath, bbId);
+                }
+            }
+            else
+            {
+                stats.Failed++;
+                hasErrors = true;
+                watermarkBroken = true;
+            }
         }
 
         WriteSummary(stats);
@@ -246,14 +263,16 @@ public sealed class JiraUpdater
     // Phase 2a: update status
     // -------------------------------------------------------------------------
 
-    private async Task<bool> UpdateStatusAsync(
+    // Returns (Ok, Changed): Ok is false on error; Changed is true only when a transition
+    // was actually applied (an empty CSV status is a no-op, not a change or a failure).
+    private async Task<(bool Ok, bool Changed)> UpdateStatusAsync(
         string jiraKey, List<string> row, CancellationToken ct)
     {
         var targetStatus = GetField(row, ColStatus);
         if (string.IsNullOrWhiteSpace(targetStatus))
         {
             _logger.LogDebug("{JiraKey}: Status is empty in CSV — skipping status update.", jiraKey);
-            return true;
+            return (true, false);
         }
 
         List<JiraTransition> transitions;
@@ -264,7 +283,7 @@ public sealed class JiraUpdater
         catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException)
         {
             _logger.LogError("{JiraKey}: Failed to get transitions: {Message}", jiraKey, ex.Message);
-            return false;
+            return (false, false);
         }
 
         var transition = transitions
@@ -276,20 +295,20 @@ public sealed class JiraUpdater
                 "{JiraKey}: No transition to status '{Status}' is available. Available: {Available}",
                 jiraKey, targetStatus,
                 string.Join(", ", transitions.Select(t => $"'{t.Name}'")));
-            return false;
+            return (false, false);
         }
 
         try
         {
             await _client.ApplyTransitionAsync(jiraKey, transition.Id, ct).ConfigureAwait(false);
-            _logger.LogDebug("{JiraKey}: Status set to '{Status}'.", jiraKey, targetStatus);
-            return true;
+            _logger.LogInformation("{JiraKey}: status set to '{Status}'.", jiraKey, targetStatus);
+            return (true, true);
         }
         catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException)
         {
             _logger.LogError("{JiraKey}: Failed to apply transition to '{Status}': {Message}",
                 jiraKey, targetStatus, ex.Message);
-            return false;
+            return (false, false);
         }
     }
 
@@ -297,7 +316,8 @@ public sealed class JiraUpdater
     // Phase 2b: add missing comments
     // -------------------------------------------------------------------------
 
-    private async Task<bool> UpdateCommentsAsync(
+    // Returns (Ok, Added): Ok is false on error; Added is the number of comments added.
+    private async Task<(bool Ok, int Added)> UpdateCommentsAsync(
         string jiraKey, List<string> row, CancellationToken ct)
     {
         // Collect CSV comment fields (columns 12+), skipping empty ones.
@@ -318,7 +338,7 @@ public sealed class JiraUpdater
 
         if (csvComments.Count == 0)
         {
-            return true;
+            return (true, 0);
         }
 
         // Get existing comments from Jira (up to 100 — sufficient per design).
@@ -330,7 +350,7 @@ public sealed class JiraUpdater
         catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException)
         {
             _logger.LogError("{JiraKey}: Failed to get comments: {Message}", jiraKey, ex.Message);
-            return false;
+            return (false, 0);
         }
 
         // The latest existing comment date is the cut-off point.
@@ -344,6 +364,15 @@ public sealed class JiraUpdater
             .OrderBy(c => c.Date)
             .ToList();
 
+        if (toAdd.Count == 0)
+        {
+            _logger.LogDebug(
+                "{JiraKey}: no new comments to add ({Count} CSV comment(s) are not newer than the latest Jira comment).",
+                jiraKey, csvComments.Count);
+            return (true, 0);
+        }
+
+        var added = 0;
         foreach (var comment in toAdd)
         {
             ct.ThrowIfCancellationRequested();
@@ -361,17 +390,18 @@ public sealed class JiraUpdater
             try
             {
                 await _client.AddCommentAsync(jiraKey, text, ct).ConfigureAwait(false);
-                _logger.LogDebug("{JiraKey}: Added comment dated {Date}.", jiraKey, comment.Date);
+                added++;
+                _logger.LogInformation("{JiraKey}: comment added (dated {Date}).", jiraKey, comment.Date);
             }
             catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException)
             {
                 _logger.LogError("{JiraKey}: Failed to add comment dated {Date}: {Message}",
                     jiraKey, comment.Date, ex.Message);
-                return false;
+                return (false, added);
             }
         }
 
-        return true;
+        return (true, added);
     }
 
     // -------------------------------------------------------------------------
@@ -450,14 +480,20 @@ public sealed class JiraUpdater
     {
         _logger.LogInformation("----- update summary -----");
         _logger.LogInformation("Processed: {Processed}", stats.Processed);
+        _logger.LogInformation("Statuses updated: {StatusUpdated}", stats.StatusUpdated);
+        _logger.LogInformation("Comments added: {CommentsAdded}", stats.CommentsAdded);
+        _logger.LogInformation("Failed: {Failed}", stats.Failed);
         _logger.LogInformation("Not found in Jira: {NotFound}", stats.NotFound);
         _logger.LogInformation("Skipped (already done): {Skipped}", stats.Skipped);
     }
 
     private sealed class UpdateStats
     {
-        public int Processed { get; set; }
-        public int NotFound  { get; set; }
-        public int Skipped   { get; set; }
+        public int Processed     { get; set; }
+        public int Failed        { get; set; }
+        public int StatusUpdated { get; set; }
+        public int CommentsAdded { get; set; }
+        public int NotFound      { get; set; }
+        public int Skipped       { get; set; }
     }
 }
