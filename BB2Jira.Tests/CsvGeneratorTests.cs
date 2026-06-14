@@ -723,4 +723,50 @@ public class CsvGeneratorTests
         Assert.Contains(logger.Messages, m => m.StartsWith("Issue 2 not imported:", StringComparison.Ordinal));
         Assert.Contains(logger.Messages, m => m.StartsWith("Issue 3 not imported:", StringComparison.Ordinal));
     }
+
+    [Fact]
+    public void WhenOutputFileExistsThenOverwriteWarningIsLogged()
+    {
+        var logger = new CapturingLogger();
+        var export = new BitbucketExport
+        {
+            Issues = { new BitbucketIssue { Id = 1, Kind = "bug" } },
+        };
+
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".csv");
+        // Create the file so it exists before generation.
+        File.WriteAllText(path, "existing content");
+        try
+        {
+            CsvGenerator.Generate(export, MapWithKind(("bug", "Bug")), path, logger);
+
+            Assert.Contains(logger.Messages, m => m.Contains("will be overwritten", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void WhenOutputFileDoesNotExistThenNoOverwriteWarning()
+    {
+        var logger = new CapturingLogger();
+        var export = new BitbucketExport
+        {
+            Issues = { new BitbucketIssue { Id = 1, Kind = "bug" } },
+        };
+
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".csv");
+        try
+        {
+            CsvGenerator.Generate(export, MapWithKind(("bug", "Bug")), path, logger);
+
+            Assert.DoesNotContain(logger.Messages, m => m.Contains("will be overwritten", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
 }

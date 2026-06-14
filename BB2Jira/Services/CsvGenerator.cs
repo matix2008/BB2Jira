@@ -27,6 +27,11 @@ public static class CsvGenerator
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(logger);
 
+        if (File.Exists(outputPath))
+        {
+            logger.LogWarning("Output file already exists and will be overwritten: {OutputPath}", outputPath);
+        }
+
         var writer = BuildCsv(export, map, logger);
         writer.Save(outputPath);
         logger.LogInformation("import.csv saved: {OutputPath}", outputPath);

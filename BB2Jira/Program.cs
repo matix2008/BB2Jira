@@ -36,6 +36,11 @@ return options.Mode switch
 
 static int RunGenerateMap(CliOptions options)
 {
+    if (!ConfirmOverwrite(options.OutputPath, "map.json (manual edits will be preserved)"))
+    {
+        return 1;
+    }
+
     using var loggerFactory = CreateLoggerFactory(Path.ChangeExtension(options.OutputPath, ".log"), options.Verbose);
     var logger = loggerFactory.CreateLogger("BB2Jira");
 
@@ -60,6 +65,11 @@ static int RunGenerateMap(CliOptions options)
 
 static int RunGenerateCsv(CliOptions options)
 {
+    if (!ConfirmOverwrite(options.OutputPath, "import.csv"))
+    {
+        return 1;
+    }
+
     using var loggerFactory = CreateLoggerFactory(Path.ChangeExtension(options.OutputPath, ".log"), options.Verbose);
     var logger = loggerFactory.CreateLogger("BB2Jira");
 
@@ -132,6 +142,28 @@ static int RunValidateCsv(CliOptions options)
         logger.LogError("{Message}", ex.Message);
         return 1;
     }
+}
+
+// Prompts the user to confirm before overwriting an existing output file.
+// Returns true immediately when the file does not exist.
+static bool ConfirmOverwrite(string path, string description)
+{
+    if (!File.Exists(path))
+    {
+        return true;
+    }
+
+    Console.WriteLine($"Output file already exists: {path}");
+    Console.Write($"Overwrite {description}? [y/N]: ");
+    var answer = Console.ReadLine()?.Trim() ?? string.Empty;
+
+    if (answer.Equals("y", StringComparison.OrdinalIgnoreCase))
+    {
+        return true;
+    }
+
+    Console.WriteLine("Operation cancelled.");
+    return false;
 }
 
 // Creates a Serilog logger factory that writes to the console and to the log file (import.log / map.log).

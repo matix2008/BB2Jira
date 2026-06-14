@@ -22,7 +22,7 @@ public static class MapGenerator
         var existing = MapLoader.Load(outputPath);
         if (File.Exists(outputPath))
         {
-            logger.LogInformation("Existing map.json found: manual edits will be preserved.");
+            logger.LogWarning("Existing map.json found and will be overwritten: manual edits will be preserved.");
         }
 
         var map = Build(export, existing);

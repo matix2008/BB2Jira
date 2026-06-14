@@ -1,6 +1,7 @@
 using BB2Jira.Models.Bitbucket;
 using BB2Jira.Models.Mapping;
 using BB2Jira.Services;
+using Microsoft.Extensions.Logging;
 using Xunit;
 
 namespace BB2Jira.Tests;
@@ -309,5 +310,77 @@ public class MapGeneratorTests
         var map = MapGenerator.Build(export, new MapFile());
 
         Assert.Single(map.Milestone);
+    }
+
+    [Fact]
+    public void WhenOutputFileExistsThenOverwriteWarningIsLogged()
+    {
+        var logger = new CapturingLogger();
+        var export = new BitbucketExport
+        {
+            Issues = { new BitbucketIssue { Id = 1, Kind = "bug" } },
+        };
+
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".json");
+        File.WriteAllText(path, "{}");
+        try
+        {
+            MapGenerator.Generate(export, path, logger);
+
+            Assert.Contains(logger.Messages, m => m.Contains("will be overwritten", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void WhenOutputFileDoesNotExistThenNoOverwriteWarning()
+    {
+        var logger = new CapturingLogger();
+        var export = new BitbucketExport
+        {
+            Issues = { new BitbucketIssue { Id = 1, Kind = "bug" } },
+        };
+
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".json");
+        try
+        {
+            MapGenerator.Generate(export, path, logger);
+
+            Assert.DoesNotContain(logger.Messages, m => m.Contains("will be overwritten", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    // Captures formatted log messages.
+    private sealed class CapturingLogger : ILogger
+    {
+        public List<string> Messages { get; } = new();
+
+        public IDisposable BeginScope<TState>(TState state) where TState : notnull
+            => NullScope.Instance;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            Messages.Add(formatter(state, exception));
+        }
+
+        private sealed class NullScope : IDisposable
+        {
+            public static readonly NullScope Instance = new();
+            public void Dispose() { }
+        }
     }
 }
