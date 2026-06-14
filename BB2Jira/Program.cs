@@ -30,6 +30,7 @@ return options.Mode switch
 {
     AppMode.GenerateMap => RunGenerateMap(options),
     AppMode.GenerateCsv => RunGenerateCsv(options),
+    AppMode.ValidateCsv => RunValidateCsv(options),
     _ => 2,
 };
 
@@ -75,6 +76,56 @@ static int RunGenerateCsv(CliOptions options)
         var map = MapLoader.Load(options.MapPath);
         CsvGenerator.Generate(export, map, options.OutputPath, logger);
         return 0;
+    }
+    catch (Exception ex) when (ex is FileNotFoundException or InvalidDataException)
+    {
+        logger.LogError("{Message}", ex.Message);
+        return 1;
+    }
+}
+
+static int RunValidateCsv(CliOptions options)
+{
+    // Log file is placed next to the validated CSV (import-check.log).
+    var logPath = Path.Combine(
+        Path.GetDirectoryName(Path.GetFullPath(options.OutputPath)) ?? string.Empty,
+        "import-check.log");
+
+    using var loggerFactory = CreateLoggerFactory(logPath, options.Verbose);
+    var logger = loggerFactory.CreateLogger("BB2Jira");
+
+    logger.LogInformation("Mode: validate import.csv");
+    logger.LogInformation("CSV file: {CsvPath}", options.OutputPath);
+
+    try
+    {
+        // Load export and map only when they actually exist at the specified paths.
+        BB2Jira.Models.Bitbucket.BitbucketExport? export = null;
+        BB2Jira.Models.Mapping.MapFile? map = null;
+
+        if (File.Exists(options.InputPath))
+        {
+            logger.LogInformation("Input file: {InputPath}", options.InputPath);
+            export = BitbucketLoader.Load(options.InputPath);
+            logger.LogInformation("Loaded issues: {IssueCount}", export.Issues.Count);
+        }
+        else
+        {
+            logger.LogDebug("Input file not found -- cross-reference check skipped: {InputPath}", options.InputPath);
+        }
+
+        if (File.Exists(options.MapPath))
+        {
+            logger.LogInformation("Mapping file: {MapPath}", options.MapPath);
+            map = MapLoader.Load(options.MapPath);
+        }
+        else
+        {
+            logger.LogDebug("Map file not found -- Issue Type check skipped: {MapPath}", options.MapPath);
+        }
+
+        var passed = CsvValidator.Validate(options.OutputPath, logger, export, map);
+        return passed ? 0 : 2;
     }
     catch (Exception ex) when (ex is FileNotFoundException or InvalidDataException)
     {

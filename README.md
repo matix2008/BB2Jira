@@ -32,6 +32,9 @@ BB2Jira -m [-i db-2.0.json] [-o map.json]
 
 # Generate import.csv from db-2.0.json + map.json
 BB2Jira -c -i db-2.0.json -m map.json -o import.csv
+
+# Validate an existing import.csv
+BB2Jira -k [-o import.csv] [-i db-2.0.json] [-m map.json]
 ```
 
 When run from source you can use:
@@ -44,13 +47,15 @@ dotnet run --project BB2Jira -- -m -i db-2.0.json -o map.json
 
 ## Command-line options
 
-| Key            | Description                                                           |
-| -------------- | --------------------------------------------------------------------- |
-| `-m`, `--map`  | Generate `map.json` (without `-c`); path to `map.json` (with `-c`)    |
-| `-c`, `--csv`  | Generate `import.csv`                                                  |
-| `-i`, `--input`| Path to the Bitbucket export file (`db-2.0.json`)                     |
-| `-o`, `--output`| Path to the result (`map.json` or `import.csv`)                      |
-| `-h`, `--help` | Show help                                                             |
+| Key            | Description                                                                   |
+| -------------- | ----------------------------------------------------------------------------- |
+| `-m`, `--map`  | Generate `map.json` (without `-c`/`-k`); path to `map.json` (with `-c`/`-k`) |
+| `-c`, `--csv`  | Generate `import.csv`                                                          |
+| `-k`, `--check`| Validate an existing `import.csv`                                              |
+| `-i`, `--input`| Path to the Bitbucket export file (`db-2.0.json`)                             |
+| `-o`, `--output`| Path to the result (`map.json` or `import.csv`)                              |
+| `-v`, `--verbose`| Show per-issue diagnostics on the console                                   |
+| `-h`, `--help` | Show help                                                                     |
 
 The utility prints a version and copyright banner on every launch, including when
 showing help.
@@ -61,11 +66,41 @@ showing help.
 | ---- | ----------------------------- | ------------ |
 | `-m` | `db-2.0.json`                 | `map.json`   |
 | `-c` | `db-2.0.json` + `map.json`    | `import.csv` |
+| `-k` | `import.csv` (+ optional `db-2.0.json` and `map.json`) | `import.csv` (checked) |
 
 The `-m` key is overloaded:
 
 - **without `-c`** it selects the `map.json` generation mode;
-- **together with `-c`** it provides the path to an existing `map.json`.
+- **together with `-c`** it provides the path to an existing `map.json`;
+- **together with `-k`** it provides the path to `map.json` for cross-reference validation.
+
+---
+
+## Validation (`-k`)
+
+The `-k` key checks an existing `import.csv` and writes a log to `import-check.log`
+(placed next to the validated file).
+
+### Checks performed
+
+| # | Check | Severity | Stops? |
+|---|-------|----------|--------|
+| 1 | File exists and is readable UTF-8 | Error | Yes |
+| 2 | CSV is syntactically valid (RFC 4180, balanced quotes, uniform column count) | Error | Yes |
+| 3 | Header row contains all required columns in the correct order | Error | Yes |
+| 4 | Required fields (`Issue Type`, `Summary`, `Status`) are not empty | Error | No |
+| 5 | `Created` / `Updated` match format `yyyy-MM-dd HH:mm:ss` | Warning | No |
+| 6 | `Bitbucket Issue ID` values are unique | Warning | No |
+| 7 | *(when `-i` is resolvable)* Every issue from the export has a row in the CSV | Warning | No |
+| 8 | *(when `-m` is resolvable)* `Issue Type` values match the `kind` map | Warning | No |
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| `0`  | Validation passed (warnings may still be present) |
+| `1`  | Unexpected error (file I/O, JSON parse failure) |
+| `2`  | Validation failed (one or more errors) |
 
 ---
 
