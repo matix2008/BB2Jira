@@ -17,6 +17,9 @@ public enum AppMode
 
     /// <summary>Update Jira issues via API (-u key).</summary>
     UpdateJira,
+
+    /// <summary>View a single issue from the export file (-n key).</summary>
+    ViewIssue,
 }
 
 /// <summary>
@@ -45,6 +48,9 @@ public sealed class CliOptions
 
     /// <summary>When true, per-issue diagnostic messages are shown on the console (-v).</summary>
     public bool Verbose { get; private set; }
+
+    /// <summary>Issue number to view (-n).</summary>
+    public int? IssueNumber { get; private set; }
 
 
     public IReadOnlyList<string> Errors => _errors;
@@ -126,6 +132,20 @@ public sealed class CliOptions
                     options.Mode = AppMode.UpdateJira;
                     break;
 
+                case "-n":
+                case "--number":
+                    if (TryReadValue(args, ref i, out var numberValue) && int.TryParse(numberValue, out var issueNum))
+                    {
+                        options.IssueNumber = issueNum;
+                        options.Mode = AppMode.ViewIssue;
+                    }
+                    else
+                    {
+                        options._errors.Add("Key -n is specified without a valid issue number.");
+                    }
+
+                    break;
+
                 default:
                     options._errors.Add($"Unknown argument: {arg}");
                     break;
@@ -181,8 +201,17 @@ public sealed class CliOptions
 
                 break;
 
+            case AppMode.ViewIssue:
+                // In view mode -o is the CSV to read.
+                if (!outputExplicit)
+                {
+                    options.OutputPath = DefaultCsvPath;
+                }
+
+                break;
+
             case AppMode.None:
-                options._errors.Add("No operation mode specified. Use -m (map.json), -c (import.csv), -k (validate import.csv), or -u (update Jira).");
+                options._errors.Add("No operation mode specified. Use -m (map.json), -c (import.csv), -k (validate import.csv), -u (update Jira), or -n (view issue).");
                 break;
         }
     }
@@ -212,6 +241,7 @@ public sealed class CliOptions
           BB2Jira -c -i db-2.0.json -m map.json -o import.csv
           BB2Jira -k [-o import.csv] [-i db-2.0.json] [-m map.json]
           BB2Jira -u [-o import.csv] [-m map.json]
+          BB2Jira -n <issue_number> [-o import.csv]
 
         Keys:
           -m, --map     generate map.json mode (without -c/-k/-u);
@@ -219,6 +249,7 @@ public sealed class CliOptions
           -c, --csv     generate import.csv mode
           -k, --check   validate an existing import.csv
           -u, --update  update Jira issues via API
+          -n, --number  view a single issue from the export file
           -i, --input   path to the Bitbucket export file (db-2.0.json)
           -o, --output  path to the result (map.json or import.csv)
           -v, --verbose show per-issue diagnostics on the console

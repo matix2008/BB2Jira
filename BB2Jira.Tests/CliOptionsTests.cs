@@ -125,4 +125,65 @@ public class CliOptionsTests
 
         Assert.False(options.Verbose);
     }
+
+    [Fact]
+    public void WhenNumberKeyThenModeIsViewIssue()
+    {
+        var options = CliOptions.Parse(new[] { "-n", "42" });
+
+        Assert.Equal(AppMode.ViewIssue, options.Mode);
+        Assert.True(options.IsValid);
+    }
+
+    [Fact]
+    public void WhenNumberKeyThenIssueNumberIsParsed()
+    {
+        var options = CliOptions.Parse(new[] { "-n", "7" });
+
+        Assert.Equal(7, options.IssueNumber);
+    }
+
+    [Fact]
+    public void WhenNumberKeyLongFormThenIssueNumberIsParsed()
+    {
+        var options = CliOptions.Parse(new[] { "--number", "15" });
+
+        Assert.Equal(AppMode.ViewIssue, options.Mode);
+        Assert.Equal(15, options.IssueNumber);
+    }
+
+    [Fact]
+    public void WhenNumberKeyWithoutValueThenErrorIsRecorded()
+    {
+        var options = CliOptions.Parse(new[] { "-n" });
+
+        Assert.False(options.IsValid);
+        Assert.Contains(options.Errors, e => e.Contains("-n"));
+    }
+
+    [Fact]
+    public void WhenNumberKeyWithNonNumericValueThenErrorIsRecorded()
+    {
+        var options = CliOptions.Parse(new[] { "-n", "abc" });
+
+        Assert.False(options.IsValid);
+        Assert.Contains(options.Errors, e => e.Contains("-n"));
+    }
+
+    [Fact]
+    public void WhenNumberKeyWithOutputThenOutputPathIsParsed()
+    {
+        var options = CliOptions.Parse(new[] { "-n", "5", "-o", "custom.csv" });
+
+        Assert.Equal(AppMode.ViewIssue, options.Mode);
+        Assert.Equal("custom.csv", options.OutputPath);
+    }
+
+    [Fact]
+    public void WhenNumberKeyWithoutOutputThenOutputDefaultsToImportCsv()
+    {
+        var options = CliOptions.Parse(new[] { "-n", "10" });
+
+        Assert.Equal("import.csv", options.OutputPath);
+    }
 }

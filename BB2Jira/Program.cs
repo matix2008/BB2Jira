@@ -33,6 +33,7 @@ return options.Mode switch
     AppMode.GenerateCsv => RunGenerateCsv(options),
     AppMode.ValidateCsv => RunValidateCsv(options),
     AppMode.UpdateJira  => RunUpdateJira(options),
+    AppMode.ViewIssue   => RunViewIssue(options),
     _ => 2,
 };
 
@@ -215,6 +216,103 @@ static bool ConfirmOverwrite(string path, string description)
 
     Console.WriteLine("Operation cancelled.");
     return false;
+}
+
+static int RunViewIssue(CliOptions options)
+{
+    var issueNumber = options.IssueNumber!.Value;
+    var csvPath = options.OutputPath;
+
+    if (!File.Exists(csvPath))
+    {
+        Console.Error.WriteLine($"CSV file not found: {csvPath}");
+        return 1;
+    }
+
+    try
+    {
+        var text = File.ReadAllText(csvPath, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        var rows = CsvValidator.ParseCsv(text);
+
+        if (rows.Count < 2)
+        {
+            Console.Error.WriteLine("CSV file is empty or contains only a header.");
+            return 1;
+        }
+
+        var header = rows[0];
+        var colIndex = new Dictionary<string, int>(StringComparer.Ordinal);
+        for (var i = 0; i < header.Count; i++)
+        {
+            colIndex[header[i]] = i;
+        }
+
+        if (!colIndex.TryGetValue("Bitbucket Issue ID", out var idCol))
+        {
+            Console.Error.WriteLine("Column 'Bitbucket Issue ID' not found in CSV header.");
+            return 1;
+        }
+
+        var issueNumberStr = issueNumber.ToString();
+        var row = rows.Skip(1).FirstOrDefault(r => r.Count > idCol && r[idCol] == issueNumberStr);
+
+        if (row is null)
+        {
+            Console.Error.WriteLine($"Issue #{issueNumber} not found in {csvPath}.");
+            return 1;
+        }
+
+        string Val(string col) => colIndex.TryGetValue(col, out var idx) && idx < row.Count && !string.IsNullOrEmpty(row[idx]) ? row[idx] : "—";
+
+        Console.WriteLine($"Issue #{issueNumber}: {Val("Summary")}");
+        Console.WriteLine(new string('-', 60));
+        Console.WriteLine($"  Issue Type: {Val("Issue Type")}");
+        Console.WriteLine($"  Status:     {Val("Status")}");
+        Console.WriteLine($"  Priority:   {Val("Priority")}");
+        Console.WriteLine($"  Reporter:   {Val("Reporter")}");
+        Console.WriteLine($"  Assignee:   {Val("Assignee")}");
+        Console.WriteLine($"  Milestone:  {Val("Bitbucket Milestone")}");
+        Console.WriteLine($"  Version:    {Val("Fix Version/s")}");
+        Console.WriteLine($"  Created:    {Val("Created")}");
+        Console.WriteLine($"  Updated:    {Val("Updated")}");
+
+        var description = Val("Description");
+        if (description != "—")
+        {
+            Console.WriteLine();
+            Console.WriteLine("Description:");
+            Console.WriteLine(description);
+        }
+
+        // Collect Comment columns.
+        var commentCols = header
+            .Select((name, idx) => (name, idx))
+            .Where(x => x.name.StartsWith("Comment", StringComparison.Ordinal))
+            .Select(x => x.idx)
+            .ToList();
+
+        var comments = commentCols
+            .Where(idx => idx < row.Count && !string.IsNullOrWhiteSpace(row[idx]))
+            .Select(idx => row[idx])
+            .ToList();
+
+        if (comments.Count > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine($"Comments ({comments.Count}):");
+            foreach (var comment in comments)
+            {
+                Console.WriteLine($"  {comment}");
+            }
+        }
+
+        return 0;
+    }
+    catch (Exception ex) when (ex is FormatException or IOException)
+    {
+        Console.Error.WriteLine(ex.Message);
+        return 1;
+    }
 }
 
 // Creates a Serilog logger factory that writes to the console and to the log file (import.log / map.log).

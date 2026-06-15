@@ -38,6 +38,9 @@ BB2Jira -k [-o import.csv] [-i db-2.0.json] [-m map.json]
 
 # Update Jira issues via API
 BB2Jira -u [-o import.csv] [-m map.json]
+
+# View a single issue from import.csv
+BB2Jira -n <issue_number> [-o import.csv]
 ```
 
 When run from source you can use:
@@ -56,6 +59,7 @@ dotnet run --project BB2Jira -- -m -i db-2.0.json -o map.json
 | `-c`, `--csv`  | Generate `import.csv`                                                                 |
 | `-k`, `--check`| Validate an existing `import.csv`                                                     |
 | `-u`, `--update`| Update Jira issues via API                                                           |
+| `-n`, `--number`| View a single issue from `import.csv` by its Bitbucket Issue ID                       |
 | `-i`, `--input`| Path to the Bitbucket export file (`db-2.0.json`)                                    |
 | `-o`, `--output`| Path to the result (`map.json` or `import.csv`)                                     |
 | `-v`, `--verbose`| Show per-issue diagnostics on the console                                            |
@@ -72,6 +76,7 @@ showing help.
 | `-c` | `db-2.0.json` + `map.json`    | `import.csv` |
 | `-k` | `import.csv` (+ optional `db-2.0.json` and `map.json`) | `import.csv` (checked) |
 | `-u` | `import.csv` + `map.json` (with `jira` section filled) | Jira updated in place |
+| `-n` | `import.csv` | Issue details printed to console |
 
 The `-m` key is overloaded:
 
