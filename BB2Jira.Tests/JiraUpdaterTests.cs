@@ -115,6 +115,7 @@ public class JiraUpdaterTests
         public List<JiraComment> ExistingComments { get; set; } = [];
 
         public List<string> AddedComments { get; } = new();
+        public List<string> UpdatedComments { get; } = new();
         public List<string> AppliedTransitions { get; } = new();
         public int ResolveDisplayNameCalls { get; private set; }
 
@@ -155,6 +156,12 @@ public class JiraUpdaterTests
         public Task AddCommentAsync(string issueKey, string text, CancellationToken ct = default)
         {
             AddedComments.Add($"{issueKey}:{text}");
+            return Task.CompletedTask;
+        }
+
+        public Task UpdateCommentAsync(string issueKey, string commentId, string text, CancellationToken ct = default)
+        {
+            UpdatedComments.Add($"{issueKey}:{commentId}:{text}");
             return Task.CompletedTask;
         }
 
@@ -273,7 +280,7 @@ public class JiraUpdaterTests
         // Existing Jira comment is newer than the CSV comment.
         client.ExistingComments =
         [
-            new JiraComment(new DateTimeOffset(2024, 12, 1, 0, 0, 0, TimeSpan.Zero), "some text"),
+            new JiraComment("100", new DateTimeOffset(2024, 12, 1, 0, 0, 0, TimeSpan.Zero), "some text"),
         ];
         var comment = "2024-06-01 10:00:00;acc123;Old comment";
         var csv = WriteTempCsv(MakeCsv(MakeRow(1, comment: comment)));
@@ -291,7 +298,7 @@ public class JiraUpdaterTests
         client.IssueMap[1] = "PROJ-1";
         client.ExistingComments =
         [
-            new JiraComment(new DateTimeOffset(2024, 1, 1, 0, 0, 0, TimeSpan.Zero), "old"),
+            new JiraComment("100", new DateTimeOffset(2024, 1, 1, 0, 0, 0, TimeSpan.Zero), "old"),
         ];
         var comment = "2024-06-01 10:00:00;acc123;New comment";
         var csv = WriteTempCsv(MakeCsv(MakeRow(1, comment: comment)));
@@ -540,5 +547,127 @@ public class JiraUpdaterTests
 
         Assert.True(result);
         Assert.Contains("PROJ-2:10", client.AppliedTransitions);
+    }
+
+    // -------------------------------------------------------------------------
+    // Comment mode: all (synchronize all comments)
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task WhenCommentModeAllAndCommentMatchesThenNoUpdate()
+    {
+        var settings = DefaultSettings();
+        settings.CommentMode = JiraSettings.CommentModeAll;
+
+        var client = new StubClient();
+        client.IssueMap[1] = "PROJ-1";
+        // Existing Jira comment matches the expected formatted text.
+        client.ExistingComments =
+        [
+            new JiraComment("200", DateTimeOffset.MinValue, "2024-06-01 10:00:00 | User(acc123) | Hello world"),
+        ];
+        var comment = "2024-06-01 10:00:00;acc123;Hello world";
+        var csv = WriteTempCsv(MakeCsv(MakeRow(1, comment: comment)));
+        var updater = new JiraUpdater(client, settings, Logger());
+
+        await updater.RunAsync(csv, TempFile());
+
+        Assert.Empty(client.AddedComments);
+        Assert.Empty(client.UpdatedComments);
+    }
+
+    [Fact]
+    public async Task WhenCommentModeAllAndCommentDiffersThenCommentUpdated()
+    {
+        var settings = DefaultSettings();
+        settings.CommentMode = JiraSettings.CommentModeAll;
+
+        var client = new StubClient();
+        client.IssueMap[1] = "PROJ-1";
+        // Existing text differs from the CSV.
+        client.ExistingComments =
+        [
+            new JiraComment("200", DateTimeOffset.MinValue, "2024-06-01 10:00:00 | User(acc123) | Old text"),
+        ];
+        var comment = "2024-06-01 10:00:00;acc123;New text";
+        var csv = WriteTempCsv(MakeCsv(MakeRow(1, comment: comment)));
+        var updater = new JiraUpdater(client, settings, Logger());
+
+        await updater.RunAsync(csv, TempFile());
+
+        Assert.Empty(client.AddedComments);
+        Assert.Single(client.UpdatedComments);
+        Assert.Contains("PROJ-1:200:", client.UpdatedComments[0]);
+        Assert.Contains("New text", client.UpdatedComments[0]);
+    }
+
+    [Fact]
+    public async Task WhenCommentModeAllAndMoreCsvCommentsThanExistingThenNewOnesAdded()
+    {
+        var settings = DefaultSettings();
+        settings.CommentMode = JiraSettings.CommentModeAll;
+
+        var client = new StubClient();
+        client.IssueMap[1] = "PROJ-1";
+        // One existing comment that matches; CSV has two comments total.
+        client.ExistingComments =
+        [
+            new JiraComment("200", DateTimeOffset.MinValue, "2024-06-01 10:00:00 | User(acc1) | First"),
+        ];
+        // Two CSV comments: first matches, second is new.
+        var csv = WriteTempCsv(MakeCsv(
+            $"Bug,Summary 1,Desc,Open,Medium,rep@x.com,,2024-01-01 00:00:00,2024-01-01 00:00:00,,,1,2024-06-01 10:00:00;acc1;First,2024-06-02 12:00:00;acc2;Second"));
+        var updater = new JiraUpdater(client, settings, Logger());
+
+        await updater.RunAsync(csv, TempFile());
+
+        Assert.Empty(client.UpdatedComments);
+        Assert.Single(client.AddedComments);
+        Assert.Contains("Second", client.AddedComments[0]);
+    }
+
+    [Fact]
+    public async Task WhenCommentModeNewThenDefaultBehaviorPreserved()
+    {
+        // Explicit "new" mode — same as default: only adds newer comments.
+        var settings = DefaultSettings();
+        settings.CommentMode = JiraSettings.CommentModeNew;
+
+        var client = new StubClient();
+        client.IssueMap[1] = "PROJ-1";
+        client.ExistingComments =
+        [
+            new JiraComment("200", new DateTimeOffset(2024, 12, 1, 0, 0, 0, TimeSpan.Zero), "existing"),
+        ];
+        var comment = "2024-06-01 10:00:00;acc123;Older comment";
+        var csv = WriteTempCsv(MakeCsv(MakeRow(1, comment: comment)));
+        var updater = new JiraUpdater(client, settings, Logger());
+
+        await updater.RunAsync(csv, TempFile());
+
+        Assert.Empty(client.AddedComments);
+        Assert.Empty(client.UpdatedComments);
+    }
+
+    [Fact]
+    public async Task WhenCommentModeAllThenSummaryReportsUpdatedCount()
+    {
+        var settings = DefaultSettings();
+        settings.CommentMode = JiraSettings.CommentModeAll;
+
+        var logger = new CapturingLogger();
+        var client = new StubClient();
+        client.IssueMap[1] = "PROJ-1";
+        client.ExistingComments =
+        [
+            new JiraComment("200", DateTimeOffset.MinValue, "old text"),
+        ];
+        var comment = "2024-06-01 10:00:00;acc123;New text";
+        var csv = WriteTempCsv(MakeCsv(MakeRow(1, comment: comment)));
+        var updater = new JiraUpdater(client, settings, logger);
+
+        await updater.RunAsync(csv, TempFile());
+
+        Assert.True(logger.HasInformation("Comments updated: 1"));
     }
 }

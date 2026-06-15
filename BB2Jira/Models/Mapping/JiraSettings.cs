@@ -56,6 +56,28 @@ public sealed class JiraSettings
     [JsonPropertyName("updateComments")]
     public bool UpdateComments { get; set; } = true;
 
+    /// <summary>
+    /// Comment synchronization mode:
+    /// <list type="bullet">
+    /// <item><c>new</c> (default) — only adds comments whose date is later than the
+    /// latest existing Jira comment.</item>
+    /// <item><c>all</c> — compares every comment by date/author/text and updates
+    /// (or adds) comments that differ from the CSV data.</item>
+    /// </list>
+    /// </summary>
+    [JsonPropertyName("commentMode")]
+    public string CommentMode { get; set; } = CommentModeNew;
+
+    /// <summary>Comment mode value: add only new (missing) comments.</summary>
+    public const string CommentModeNew = "new";
+
+    /// <summary>Comment mode value: synchronize all comments (update differing ones).</summary>
+    public const string CommentModeAll = "all";
+
+    /// <summary>True when <see cref="CommentMode"/> selects full synchronization.</summary>
+    public bool SyncAllComments =>
+        CommentModeAll.Equals(CommentMode, StringComparison.OrdinalIgnoreCase);
+
     /// <summary>True when <see cref="MatchBy"/> selects the Bitbucket issue URL strategy.</summary>
     public bool MatchByIssueUrl =>
         MatchByUrl.Equals(MatchBy, StringComparison.OrdinalIgnoreCase);

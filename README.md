@@ -31,16 +31,16 @@ dotnet build
 BB2Jira -m [-i db-2.0.json] [-o map.json]
 
 # Generate import.csv from db-2.0.json + map.json
-BB2Jira -c -i db-2.0.json -m map.json -o import.csv
+BB2Jira -c [-i db-2.0.json] [-m map.json] [-o import.csv]
 
 # Validate an existing import.csv
-BB2Jira -k [-o import.csv] [-i db-2.0.json] [-m map.json]
+BB2Jira -k [-i import.csv] [-m map.json]
 
 # Update Jira issues via API
-BB2Jira -u [-o import.csv] [-m map.json]
+BB2Jira -u <all|new> [-i import.csv] [-m map.json]
 
 # View a single issue from import.csv
-BB2Jira -n <issue_number> [-o import.csv]
+BB2Jira -n <issue_number> [-i import.csv]
 ```
 
 When run from source you can use:
@@ -58,9 +58,9 @@ dotnet run --project BB2Jira -- -m -i db-2.0.json -o map.json
 | `-m`, `--map`  | Generate `map.json` (without `-c`/`-k`/`-u`); path to `map.json` (with `-c`/`-k`/`-u`) |
 | `-c`, `--csv`  | Generate `import.csv`                                                                 |
 | `-k`, `--check`| Validate an existing `import.csv`                                                     |
-| `-u`, `--update`| Update Jira issues via API                                                           |
+| `-u`, `--update`| Update Jira issues via API; optional value: `all` or `new` (comment mode)            |
 | `-n`, `--number`| View a single issue from `import.csv` by its Bitbucket Issue ID                       |
-| `-i`, `--input`| Path to the Bitbucket export file (`db-2.0.json`)                                    |
+| `-i`, `--input`| Path to the input file (`db-2.0.json` or `import.csv` depending on mode)             |
 | `-o`, `--output`| Path to the result (`map.json` or `import.csv`)                                     |
 | `-v`, `--verbose`| Show per-issue diagnostics on the console                                            |
 | `-h`, `--help` | Show help                                                                             |
@@ -74,7 +74,7 @@ showing help.
 | ---- | ----------------------------- | ------------ |
 | `-m` | `db-2.0.json`                 | `map.json`   |
 | `-c` | `db-2.0.json` + `map.json`    | `import.csv` |
-| `-k` | `import.csv` (+ optional `db-2.0.json` and `map.json`) | `import.csv` (checked) |
+| `-k` | `import.csv` (+ optional `map.json`) | — (validation result in log) |
 | `-u` | `import.csv` + `map.json` (with `jira` section filled) | Jira updated in place |
 | `-n` | `import.csv` | Issue details printed to console |
 
@@ -99,6 +99,7 @@ maintained so interrupted runs can continue from where they left off.
 |---|---|
 | Status | When `updateStatus: true` in `map.json` — applied via workflow transition |
 | Comments | When `updateComments: true` — adds comments whose date is later than the latest existing Jira comment |
+| Comments (all) | When `updateComments: true` and `commentMode: "all"` — updates existing comments that differ and adds missing ones |
 
 ### How issues are matched
 
@@ -135,11 +136,19 @@ Generated automatically by `-m` with placeholder values. Fill in before running 
   "bitbucketRepoUrl": "https://bitbucket.org/yourorg/yourrepo",
   "matchBy": "serviceBlock",
   "updateStatus": true,
-  "updateComments": true
+  "updateComments": true,
+  "commentMode": "new"
 }
 ```
 
 `matchBy` accepts `serviceBlock` (default) or `url` — see [How issues are matched](#how-issues-are-matched).
+
+`commentMode` controls how comments are synchronized:
+
+| Value | Behavior |
+|---|---|
+| `new` (default) | Only adds comments whose date is later than the latest existing Jira comment |
+| `all` | Compares every comment by position and content; updates those that differ from the CSV data and adds missing ones |
 
 ### Exit codes
 

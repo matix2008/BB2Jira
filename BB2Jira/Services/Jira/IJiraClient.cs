@@ -13,7 +13,7 @@ public sealed record JiraSearchPage(IReadOnlyList<JiraIssueRef> Issues, string? 
 public sealed record JiraTransition(string Id, string Name);
 
 /// <summary>A comment on a Jira issue.</summary>
-public sealed record JiraComment(DateTimeOffset Created, string PlainText);
+public sealed record JiraComment(string Id, DateTimeOffset Created, string PlainText);
 
 /// <summary>
 /// Abstraction over the Jira REST API v3 operations required by <see cref="JiraUpdater"/>.
@@ -46,6 +46,9 @@ public interface IJiraClient
 
     /// <summary>Adds a new comment (ADF paragraph) to the given issue.</summary>
     Task AddCommentAsync(string issueKey, string text, CancellationToken ct = default);
+
+    /// <summary>Updates an existing comment (ADF paragraph) on the given issue.</summary>
+    Task UpdateCommentAsync(string issueKey, string commentId, string text, CancellationToken ct = default);
 
     /// <summary>
     /// Resolves a Jira account ID to a display name.

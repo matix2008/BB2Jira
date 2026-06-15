@@ -86,6 +86,12 @@ static int RunGenerateCsv(CliOptions options)
         var export = BitbucketLoader.Load(options.InputPath);
         logger.LogInformation("Loaded issues: {IssueCount}", export.Issues.Count);
 
+        if (!File.Exists(options.MapPath))
+        {
+            logger.LogError("Mapping file not found: {MapPath}", options.MapPath);
+            return 1;
+        }
+
         var map = MapLoader.Load(options.MapPath);
         CsvGenerator.Generate(export, map, options.OutputPath, logger);
         return 0;
@@ -100,32 +106,27 @@ static int RunGenerateCsv(CliOptions options)
 static int RunValidateCsv(CliOptions options)
 {
     // Log file is placed next to the validated CSV (import-check.log).
+    var csvPath = options.InputPath;
     var logPath = Path.Combine(
-        Path.GetDirectoryName(Path.GetFullPath(options.OutputPath)) ?? string.Empty,
+        Path.GetDirectoryName(Path.GetFullPath(csvPath)) ?? string.Empty,
         "import-check.log");
 
     using var loggerFactory = CreateLoggerFactory(logPath, options.Verbose);
     var logger = loggerFactory.CreateLogger("BB2Jira");
 
     logger.LogInformation("Mode: validate import.csv");
-    logger.LogInformation("CSV file: {CsvPath}", options.OutputPath);
+    logger.LogInformation("CSV file: {CsvPath}", csvPath);
+
+    if (!File.Exists(csvPath))
+    {
+        logger.LogError("CSV file not found: {CsvPath}", csvPath);
+        return 1;
+    }
 
     try
     {
-        // Load export and map only when they actually exist at the specified paths.
-        BB2Jira.Models.Bitbucket.BitbucketExport? export = null;
+        // Load map only when it actually exists at the specified path.
         BB2Jira.Models.Mapping.MapFile? map = null;
-
-        if (File.Exists(options.InputPath))
-        {
-            logger.LogInformation("Input file: {InputPath}", options.InputPath);
-            export = BitbucketLoader.Load(options.InputPath);
-            logger.LogInformation("Loaded issues: {IssueCount}", export.Issues.Count);
-        }
-        else
-        {
-            logger.LogDebug("Input file not found -- cross-reference check skipped: {InputPath}", options.InputPath);
-        }
 
         if (File.Exists(options.MapPath))
         {
@@ -137,7 +138,7 @@ static int RunValidateCsv(CliOptions options)
             logger.LogDebug("Map file not found -- Issue Type check skipped: {MapPath}", options.MapPath);
         }
 
-        var passed = CsvValidator.Validate(options.OutputPath, logger, export, map);
+        var passed = CsvValidator.Validate(csvPath, logger, export: null, map);
         return passed ? 0 : 2;
     }
     catch (Exception ex) when (ex is FileNotFoundException or InvalidDataException)
@@ -149,7 +150,7 @@ static int RunValidateCsv(CliOptions options)
 
 static int RunUpdateJira(CliOptions options)
 {
-    var csvPath = options.OutputPath;
+    var csvPath = options.InputPath;
     var logPath = Path.Combine(
         Path.GetDirectoryName(Path.GetFullPath(csvPath)) ?? string.Empty,
         "import-update.log");
@@ -171,6 +172,12 @@ static int RunUpdateJira(CliOptions options)
         return 1;
     }
 
+    if (!File.Exists(options.MapPath))
+    {
+        logger.LogError("Mapping file not found: {MapPath}", options.MapPath);
+        return 1;
+    }
+
     try
     {
         var map = MapLoader.Load(options.MapPath);
@@ -181,6 +188,12 @@ static int RunUpdateJira(CliOptions options)
                 "The 'jira' section in map.json is missing or incomplete. "
                 + "Fill in baseUrl, projectKey, email, apiToken and bitbucketRepoUrl.");
             return 1;
+        }
+
+        // CLI -u value overrides the commentMode from map.json.
+        if (!string.IsNullOrEmpty(options.UpdateMode))
+        {
+            map.Jira.CommentMode = options.UpdateMode;
         }
 
         using var client = new JiraClient(map.Jira, logger);
@@ -221,7 +234,7 @@ static bool ConfirmOverwrite(string path, string description)
 static int RunViewIssue(CliOptions options)
 {
     var issueNumber = options.IssueNumber!.Value;
-    var csvPath = options.OutputPath;
+    var csvPath = options.InputPath;
 
     if (!File.Exists(csvPath))
     {

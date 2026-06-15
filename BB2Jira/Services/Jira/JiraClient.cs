@@ -257,6 +257,7 @@ public sealed class JiraClient : IJiraClient, IDisposable
         var comments = new List<JiraComment>();
         foreach (var c in doc.RootElement.GetProperty("comments").EnumerateArray())
         {
+            var id = c.GetProperty("id").GetString() ?? string.Empty;
             var createdStr = c.GetProperty("created").GetString() ?? string.Empty;
             DateTimeOffset.TryParse(createdStr, out var created);
 
@@ -267,7 +268,7 @@ public sealed class JiraClient : IJiraClient, IDisposable
                 plainText = ExtractAdfText(bodyElem);
             }
 
-            comments.Add(new JiraComment(created, plainText));
+            comments.Add(new JiraComment(id, created, plainText));
         }
 
         return comments;
@@ -302,6 +303,38 @@ public sealed class JiraClient : IJiraClient, IDisposable
         var content = new StringContent(body, Encoding.UTF8, "application/json");
         var response = await _http
             .PostAsync($"rest/api/3/issue/{issueKey}/comment", content, ct)
+            .ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+    }
+
+    /// <inheritdoc/>
+    public async Task UpdateCommentAsync(
+        string issueKey, string commentId, string text, CancellationToken ct = default)
+    {
+        var adf = new
+        {
+            body = new
+            {
+                version = 1,
+                type = "doc",
+                content = new[]
+                {
+                    new
+                    {
+                        type = "paragraph",
+                        content = new[]
+                        {
+                            new { type = "text", text },
+                        },
+                    },
+                },
+            },
+        };
+
+        var body = JsonSerializer.Serialize(adf);
+        var httpContent = new StringContent(body, Encoding.UTF8, "application/json");
+        var response = await _http
+            .PutAsync($"rest/api/3/issue/{issueKey}/comment/{commentId}", httpContent, ct)
             .ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
     }

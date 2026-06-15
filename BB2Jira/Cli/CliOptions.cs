@@ -52,6 +52,9 @@ public sealed class CliOptions
     /// <summary>Issue number to view (-n).</summary>
     public int? IssueNumber { get; private set; }
 
+    /// <summary>Comment update mode for -u (all or new). Null means not specified (use map.json default).</summary>
+    public string? UpdateMode { get; private set; }
+
 
     public IReadOnlyList<string> Errors => _errors;
 
@@ -64,6 +67,7 @@ public sealed class CliOptions
         var options = new CliOptions();
         var mapKeyPresent = false;
         bool? outputExplicit = null;
+        bool? inputExplicit = null;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -90,10 +94,11 @@ public sealed class CliOptions
                     if (TryReadValue(args, ref i, out var inputValue))
                     {
                         options.InputPath = inputValue;
+                        inputExplicit = true;
                     }
                     else
                     {
-                        options._errors.Add("Key -i is specified without a value (path to db-2.0.json).");
+                        options._errors.Add("Key -i is specified without a value.");
                     }
 
                     break;
@@ -130,6 +135,11 @@ public sealed class CliOptions
                 case "-u":
                 case "--update":
                     options.Mode = AppMode.UpdateJira;
+                    if (TryReadValue(args, ref i, out var updateValue))
+                    {
+                        options.UpdateMode = updateValue;
+                    }
+
                     break;
 
                 case "-n":
@@ -158,11 +168,11 @@ public sealed class CliOptions
             options.Mode = AppMode.GenerateMap;
         }
 
-        ApplyModeDefaults(options, outputExplicit ?? false);
+        ApplyModeDefaults(options, inputExplicit ?? false, outputExplicit ?? false);
         return options;
     }
 
-    private static void ApplyModeDefaults(CliOptions options, bool outputExplicit)
+    private static void ApplyModeDefaults(CliOptions options, bool inputExplicit, bool outputExplicit)
     {
         switch (options.Mode)
         {
@@ -176,6 +186,7 @@ public sealed class CliOptions
                 break;
 
             case AppMode.GenerateCsv:
+                // In CSV mode -i is db-2.0.json (default), -o is import.csv.
                 if (!outputExplicit)
                 {
                     options.OutputPath = DefaultCsvPath;
@@ -184,28 +195,28 @@ public sealed class CliOptions
                 break;
 
             case AppMode.ValidateCsv:
-                // In validate mode -o is the CSV to check; -i and -m provide optional cross-reference data.
-                if (!outputExplicit)
+                // In validate mode -i is the CSV to check, -m provides optional map.json.
+                if (!inputExplicit)
                 {
-                    options.OutputPath = DefaultCsvPath;
+                    options.InputPath = DefaultCsvPath;
                 }
 
                 break;
 
             case AppMode.UpdateJira:
-                // In update mode -o is the CSV to read; -m provides map.json with Jira settings.
-                if (!outputExplicit)
+                // In update mode -i is the CSV to read; -m provides map.json with Jira settings.
+                if (!inputExplicit)
                 {
-                    options.OutputPath = DefaultCsvPath;
+                    options.InputPath = DefaultCsvPath;
                 }
 
                 break;
 
             case AppMode.ViewIssue:
-                // In view mode -o is the CSV to read.
-                if (!outputExplicit)
+                // In view mode -i is the CSV to read.
+                if (!inputExplicit)
                 {
-                    options.OutputPath = DefaultCsvPath;
+                    options.InputPath = DefaultCsvPath;
                 }
 
                 break;
@@ -238,19 +249,19 @@ public sealed class CliOptions
 
         Usage:
           BB2Jira -m [-i db-2.0.json] [-o map.json]
-          BB2Jira -c -i db-2.0.json -m map.json -o import.csv
-          BB2Jira -k [-o import.csv] [-i db-2.0.json] [-m map.json]
-          BB2Jira -u [-o import.csv] [-m map.json]
-          BB2Jira -n <issue_number> [-o import.csv]
+          BB2Jira -c [-i db-2.0.json] [-m map.json] [-o import.csv]
+          BB2Jira -k [-i import.csv] [-m map.json]
+          BB2Jira -u <all|new> [-i import.csv] [-m map.json]
+          BB2Jira -n <issue_number> [-i import.csv]
 
         Keys:
           -m, --map     generate map.json mode (without -c/-k/-u);
                         path to map.json (together with -c, -k or -u)
           -c, --csv     generate import.csv mode
           -k, --check   validate an existing import.csv
-          -u, --update  update Jira issues via API
-          -n, --number  view a single issue from the export file
-          -i, --input   path to the Bitbucket export file (db-2.0.json)
+          -u, --update  update Jira issues via API; optional value: all or new (comment mode)
+          -n, --number  view a single issue from import.csv
+          -i, --input   path to the input file (db-2.0.json or import.csv depending on mode)
           -o, --output  path to the result (map.json or import.csv)
           -v, --verbose show per-issue diagnostics on the console
           -h, --help    show help

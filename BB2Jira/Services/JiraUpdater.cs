@@ -126,9 +126,10 @@ public sealed class JiraUpdater
 
             if (_settings.UpdateComments)
             {
-                var (ok, added) = await UpdateCommentsAsync(jiraKey, row, ct).ConfigureAwait(false);
+                var (ok, added, updated) = await UpdateCommentsAsync(jiraKey, row, ct).ConfigureAwait(false);
                 issueOk &= ok;
                 stats.CommentsAdded += added;
+                stats.CommentsUpdated += updated;
             }
 
             if (issueOk)
@@ -316,8 +317,9 @@ public sealed class JiraUpdater
     // Phase 2b: add missing comments
     // -------------------------------------------------------------------------
 
-    // Returns (Ok, Added): Ok is false on error; Added is the number of comments added.
-    private async Task<(bool Ok, int Added)> UpdateCommentsAsync(
+    // Returns (Ok, Added, Updated): Ok is false on error; Added is the number of comments added;
+    // Updated is the number of comments updated in-place.
+    private async Task<(bool Ok, int Added, int Updated)> UpdateCommentsAsync(
         string jiraKey, List<string> row, CancellationToken ct)
     {
         // Collect CSV comment fields (columns 12+), skipping empty ones.
@@ -338,7 +340,7 @@ public sealed class JiraUpdater
 
         if (csvComments.Count == 0)
         {
-            return (true, 0);
+            return (true, 0, 0);
         }
 
         // Get existing comments from Jira (up to 100 — sufficient per design).
@@ -350,11 +352,21 @@ public sealed class JiraUpdater
         catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException)
         {
             _logger.LogError("{JiraKey}: Failed to get comments: {Message}", jiraKey, ex.Message);
-            return (false, 0);
+            return (false, 0, 0);
         }
 
-        // The latest existing comment date is the cut-off point.
-        // Comments with a date > latest existing are missing and need to be added.
+        if (_settings.SyncAllComments)
+        {
+            return await SyncAllCommentsAsync(jiraKey, csvComments, existing, ct).ConfigureAwait(false);
+        }
+
+        return await AddNewCommentsAsync(jiraKey, csvComments, existing, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Default mode: adds only comments newer than the latest existing Jira comment.</summary>
+    private async Task<(bool Ok, int Added, int Updated)> AddNewCommentsAsync(
+        string jiraKey, List<ParsedComment> csvComments, List<JiraComment> existing, CancellationToken ct)
+    {
         var latestExisting = existing.Count > 0
             ? existing.Max(c => c.Created)
             : DateTimeOffset.MinValue;
@@ -369,7 +381,7 @@ public sealed class JiraUpdater
             _logger.LogDebug(
                 "{JiraKey}: no new comments to add ({Count} CSV comment(s) are not newer than the latest Jira comment).",
                 jiraKey, csvComments.Count);
-            return (true, 0);
+            return (true, 0, 0);
         }
 
         var added = 0;
@@ -377,15 +389,7 @@ public sealed class JiraUpdater
         {
             ct.ThrowIfCancellationRequested();
 
-            // Resolve accountId to displayName (cached).
-            var author = string.IsNullOrWhiteSpace(comment.AccountId)
-                ? string.Empty
-                : await _client.ResolveDisplayNameAsync(comment.AccountId, ct).ConfigureAwait(false);
-
-            // Format: "date | DisplayName | text"
-            var text = string.IsNullOrWhiteSpace(author)
-                ? $"{comment.Date:yyyy-MM-dd HH:mm:ss} | {comment.Text}"
-                : $"{comment.Date:yyyy-MM-dd HH:mm:ss} | {author} | {comment.Text}";
+            var text = await FormatCommentTextAsync(comment, ct).ConfigureAwait(false);
 
             try
             {
@@ -397,11 +401,95 @@ public sealed class JiraUpdater
             {
                 _logger.LogError("{JiraKey}: Failed to add comment dated {Date}: {Message}",
                     jiraKey, comment.Date, ex.Message);
-                return (false, added);
+                return (false, added, 0);
             }
         }
 
-        return (true, added);
+        return (true, added, 0);
+    }
+
+    /// <summary>
+    /// "all" mode: compares CSV comments with existing Jira comments by rendered text.
+    /// Updates comments that differ and adds those that are missing.
+    /// </summary>
+    private async Task<(bool Ok, int Added, int Updated)> SyncAllCommentsAsync(
+        string jiraKey, List<ParsedComment> csvComments, List<JiraComment> existing, CancellationToken ct)
+    {
+        var added = 0;
+        var updated = 0;
+
+        // Build expected texts for each CSV comment.
+        var expectedTexts = new List<string>(csvComments.Count);
+        foreach (var comment in csvComments)
+        {
+            expectedTexts.Add(await FormatCommentTextAsync(comment, ct).ConfigureAwait(false));
+        }
+
+        // Walk through CSV comments by index: match to existing by position.
+        for (var i = 0; i < csvComments.Count; i++)
+        {
+            ct.ThrowIfCancellationRequested();
+            var expectedText = expectedTexts[i];
+
+            if (i < existing.Count)
+            {
+                // Compare with existing comment at the same position.
+                if (string.Equals(existing[i].PlainText.Trim(), expectedText.Trim(), StringComparison.Ordinal))
+                {
+                    continue; // Already matches — no change needed.
+                }
+
+                // Content differs — update in place.
+                try
+                {
+                    await _client.UpdateCommentAsync(jiraKey, existing[i].Id, expectedText, ct).ConfigureAwait(false);
+                    updated++;
+                    _logger.LogInformation("{JiraKey}: comment updated (index {Index}, dated {Date}).",
+                        jiraKey, i, csvComments[i].Date);
+                }
+                catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException)
+                {
+                    _logger.LogError("{JiraKey}: Failed to update comment (index {Index}): {Message}",
+                        jiraKey, i, ex.Message);
+                    return (false, added, updated);
+                }
+            }
+            else
+            {
+                // No existing comment at this position — add a new one.
+                try
+                {
+                    await _client.AddCommentAsync(jiraKey, expectedText, ct).ConfigureAwait(false);
+                    added++;
+                    _logger.LogInformation("{JiraKey}: comment added (dated {Date}).", jiraKey, csvComments[i].Date);
+                }
+                catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException)
+                {
+                    _logger.LogError("{JiraKey}: Failed to add comment dated {Date}: {Message}",
+                        jiraKey, csvComments[i].Date, ex.Message);
+                    return (false, added, updated);
+                }
+            }
+        }
+
+        if (added == 0 && updated == 0)
+        {
+            _logger.LogDebug("{JiraKey}: all {Count} comment(s) are already in sync.", jiraKey, csvComments.Count);
+        }
+
+        return (true, added, updated);
+    }
+
+    /// <summary>Formats a parsed CSV comment into the plain-text string stored in Jira.</summary>
+    private async Task<string> FormatCommentTextAsync(ParsedComment comment, CancellationToken ct)
+    {
+        var author = string.IsNullOrWhiteSpace(comment.AccountId)
+            ? string.Empty
+            : await _client.ResolveDisplayNameAsync(comment.AccountId, ct).ConfigureAwait(false);
+
+        return string.IsNullOrWhiteSpace(author)
+            ? $"{comment.Date:yyyy-MM-dd HH:mm:ss} | {comment.Text}"
+            : $"{comment.Date:yyyy-MM-dd HH:mm:ss} | {author} | {comment.Text}";
     }
 
     // -------------------------------------------------------------------------
@@ -482,6 +570,7 @@ public sealed class JiraUpdater
         _logger.LogInformation("Processed: {Processed}", stats.Processed);
         _logger.LogInformation("Statuses updated: {StatusUpdated}", stats.StatusUpdated);
         _logger.LogInformation("Comments added: {CommentsAdded}", stats.CommentsAdded);
+        _logger.LogInformation("Comments updated: {CommentsUpdated}", stats.CommentsUpdated);
         _logger.LogInformation("Failed: {Failed}", stats.Failed);
         _logger.LogInformation("Not found in Jira: {NotFound}", stats.NotFound);
         _logger.LogInformation("Skipped (already done): {Skipped}", stats.Skipped);
@@ -489,11 +578,12 @@ public sealed class JiraUpdater
 
     private sealed class UpdateStats
     {
-        public int Processed     { get; set; }
-        public int Failed        { get; set; }
-        public int StatusUpdated { get; set; }
-        public int CommentsAdded { get; set; }
-        public int NotFound      { get; set; }
-        public int Skipped       { get; set; }
+        public int Processed       { get; set; }
+        public int Failed          { get; set; }
+        public int StatusUpdated   { get; set; }
+        public int CommentsAdded   { get; set; }
+        public int CommentsUpdated { get; set; }
+        public int NotFound        { get; set; }
+        public int Skipped         { get; set; }
     }
 }

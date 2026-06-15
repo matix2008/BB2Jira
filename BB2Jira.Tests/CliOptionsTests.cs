@@ -171,19 +171,60 @@ public class CliOptionsTests
     }
 
     [Fact]
-    public void WhenNumberKeyWithOutputThenOutputPathIsParsed()
+    public void WhenNumberKeyWithInputThenInputPathIsParsed()
     {
-        var options = CliOptions.Parse(new[] { "-n", "5", "-o", "custom.csv" });
+        var options = CliOptions.Parse(new[] { "-n", "5", "-i", "custom.csv" });
 
         Assert.Equal(AppMode.ViewIssue, options.Mode);
-        Assert.Equal("custom.csv", options.OutputPath);
+        Assert.Equal("custom.csv", options.InputPath);
     }
 
     [Fact]
-    public void WhenNumberKeyWithoutOutputThenOutputDefaultsToImportCsv()
+    public void WhenNumberKeyWithoutInputThenInputDefaultsToImportCsv()
     {
         var options = CliOptions.Parse(new[] { "-n", "10" });
 
-        Assert.Equal("import.csv", options.OutputPath);
+        Assert.Equal("import.csv", options.InputPath);
+    }
+
+    [Fact]
+    public void WhenUpdateKeyWithoutInputThenInputDefaultsToImportCsv()
+    {
+        var options = CliOptions.Parse(new[] { "-u" });
+
+        Assert.Equal("import.csv", options.InputPath);
+    }
+
+    [Fact]
+    public void WhenUpdateKeyWithValueThenUpdateModeIsParsed()
+    {
+        var options = CliOptions.Parse(new[] { "-u", "all" });
+
+        Assert.Equal(AppMode.UpdateJira, options.Mode);
+        Assert.Equal("all", options.UpdateMode);
+    }
+
+    [Fact]
+    public void WhenUpdateKeyWithoutValueThenUpdateModeIsNull()
+    {
+        var options = CliOptions.Parse(new[] { "-u" });
+
+        Assert.Null(options.UpdateMode);
+    }
+
+    [Fact]
+    public void WhenCheckKeyWithoutInputThenInputDefaultsToImportCsv()
+    {
+        var options = CliOptions.Parse(new[] { "-k" });
+
+        Assert.Equal("import.csv", options.InputPath);
+    }
+
+    [Fact]
+    public void WhenCheckKeyWithInputThenInputPathIsParsed()
+    {
+        var options = CliOptions.Parse(new[] { "-k", "-i", "my.csv" });
+
+        Assert.Equal("my.csv", options.InputPath);
     }
 }
