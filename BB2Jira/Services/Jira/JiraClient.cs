@@ -242,6 +242,26 @@ public sealed class JiraClient : IJiraClient, IDisposable
     }
 
     /// <inheritdoc/>
+    public async Task<string> GetCurrentStatusAsync(
+        string issueKey, CancellationToken ct = default)
+    {
+        var response = await _http
+            .GetAsync($"rest/api/3/issue/{issueKey}?fields=status", ct)
+            .ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+
+        using var doc = await JsonDocument.ParseAsync(
+            await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false), cancellationToken: ct)
+            .ConfigureAwait(false);
+
+        return doc.RootElement
+            .GetProperty("fields")
+            .GetProperty("status")
+            .GetProperty("name")
+            .GetString() ?? string.Empty;
+    }
+
+    /// <inheritdoc/>
     public async Task<List<JiraComment>> GetCommentsAsync(
         string issueKey, CancellationToken ct = default)
     {

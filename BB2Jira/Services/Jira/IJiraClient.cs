@@ -38,6 +38,9 @@ public interface IJiraClient
     /// <summary>Returns all workflow transitions currently available for the given issue.</summary>
     Task<List<JiraTransition>> GetTransitionsAsync(string issueKey, CancellationToken ct = default);
 
+    /// <summary>Returns the current status name of the given issue.</summary>
+    Task<string> GetCurrentStatusAsync(string issueKey, CancellationToken ct = default);
+
     /// <summary>Applies the specified workflow transition to the given issue.</summary>
     Task ApplyTransitionAsync(string issueKey, string transitionId, CancellationToken ct = default);
 

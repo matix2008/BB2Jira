@@ -199,7 +199,10 @@ static int RunUpdateJira(CliOptions options)
         using var client = new JiraClient(map.Jira, logger);
         var updater = new JiraUpdater(client, map.Jira, logger);
 
-        var passed = updater.RunAsync(csvPath, progressPath).GetAwaiter().GetResult();
+        // Resolve the status for duplicate issues from map.status["duplicate"].
+        map.Status.TryGetValue("duplicate", out var duplicateStatus);
+
+        var passed = updater.RunAsync(csvPath, progressPath, duplicateStatus).GetAwaiter().GetResult();
         return passed ? 0 : 2;
     }
     catch (Exception ex) when (ex is FileNotFoundException or InvalidDataException)

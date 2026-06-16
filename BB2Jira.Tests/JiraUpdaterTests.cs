@@ -96,6 +96,9 @@ public class JiraUpdaterTests
         /// <summary>Key: BitbucketId, Value: Jira issue key to return in search.</summary>
         public Dictionary<int, string> IssueMap { get; } = new();
 
+        /// <summary>Additional issues that share the same Bitbucket ID (produce duplicates).</summary>
+        public List<(int BbId, string JiraKey)> ExtraIssues { get; } = new();
+
         /// <summary>When set, the stub returns at most this many issues per page (token-based).</summary>
         public int? PageSizeOverride { get; set; }
 
@@ -111,6 +114,9 @@ public class JiraUpdaterTests
 
         public List<JiraTransition> Transitions { get; set; } =
             [new("10", "Open"), new("20", "In Progress"), new("30", "Done")];
+
+        /// <summary>Current status returned by GetCurrentStatusAsync. Default is empty (never matches target).</summary>
+        public string CurrentStatus { get; set; } = string.Empty;
 
         public List<JiraComment> ExistingComments { get; set; } = [];
 
@@ -132,6 +138,7 @@ public class JiraUpdaterTests
 
             var all = IssueMap
                 .Select(kv => new JiraIssueRef(kv.Value, DescribeIssue(kv.Key)))
+                .Concat(ExtraIssues.Select(e => new JiraIssueRef(e.JiraKey, DescribeIssue(e.BbId))))
                 .ToList();
 
             var pageItems = all.Skip(start).Take(pageSize).ToList();
@@ -143,6 +150,9 @@ public class JiraUpdaterTests
 
         public Task<List<JiraTransition>> GetTransitionsAsync(string issueKey, CancellationToken ct = default)
             => Task.FromResult(Transitions);
+
+        public Task<string> GetCurrentStatusAsync(string issueKey, CancellationToken ct = default)
+            => Task.FromResult(CurrentStatus);
 
         public Task ApplyTransitionAsync(string issueKey, string transitionId, CancellationToken ct = default)
         {
@@ -235,6 +245,21 @@ public class JiraUpdaterTests
         var result = await updater.RunAsync(csv, TempFile());
 
         Assert.False(result);
+        Assert.Empty(client.AppliedTransitions);
+    }
+
+    [Fact]
+    public async Task WhenAlreadyInTargetStatusThenNoTransitionApplied()
+    {
+        var client = new StubClient();
+        client.IssueMap[1] = "PROJ-1";
+        client.CurrentStatus = "Open"; // Already in target status.
+        var csv = WriteTempCsv(MakeCsv(MakeRow(1, status: "Open")));
+        var updater = new JiraUpdater(client, DefaultSettings(), Logger());
+
+        var result = await updater.RunAsync(csv, TempFile());
+
+        Assert.True(result);
         Assert.Empty(client.AppliedTransitions);
     }
 
@@ -669,5 +694,77 @@ public class JiraUpdaterTests
         await updater.RunAsync(csv, TempFile());
 
         Assert.True(logger.HasInformation("Comments updated: 1"));
+    }
+
+    // -------------------------------------------------------------------------
+    // Duplicate closing
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task WhenDuplicateExistsAndDuplicateStatusSetThenDuplicateIsClosed()
+    {
+        var client = new StubClient();
+        client.IssueMap[1] = "PROJ-1";
+        // PROJ-10 is a duplicate (same BB ID 1).
+        client.ExtraIssues.Add((1, "PROJ-10"));
+
+        var csv = WriteTempCsv(MakeCsv(MakeRow(1, status: "Open")));
+        var updater = new JiraUpdater(client, DefaultSettings(), Logger());
+
+        var result = await updater.RunAsync(csv, TempFile(), duplicateStatus: "Done");
+
+        Assert.True(result);
+        // PROJ-10 should be transitioned to "Done" (id "30").
+        Assert.Contains("PROJ-10:30", client.AppliedTransitions);
+    }
+
+    [Fact]
+    public async Task WhenDuplicateExistsAndDuplicateStatusEmptyThenDuplicateNotClosed()
+    {
+        var client = new StubClient();
+        client.IssueMap[1] = "PROJ-1";
+        client.ExtraIssues.Add((1, "PROJ-10"));
+
+        var csv = WriteTempCsv(MakeCsv(MakeRow(1, status: "Open")));
+        var updater = new JiraUpdater(client, DefaultSettings(), Logger());
+
+        await updater.RunAsync(csv, TempFile(), duplicateStatus: null);
+
+        // Only PROJ-1 transition should exist (for status "Open").
+        Assert.DoesNotContain(client.AppliedTransitions, t => t.StartsWith("PROJ-10:", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task WhenDuplicateAlreadyInTargetStatusThenNoTransitionApplied()
+    {
+        var client = new StubClient();
+        client.IssueMap[1] = "PROJ-1";
+        client.ExtraIssues.Add((1, "PROJ-10"));
+        client.CurrentStatus = "Done"; // Already closed.
+
+        var csv = WriteTempCsv(MakeCsv(MakeRow(1, status: "Done")));
+        var updater = new JiraUpdater(client, DefaultSettings(), Logger());
+
+        await updater.RunAsync(csv, TempFile(), duplicateStatus: "Done");
+
+        // No transitions at all — both primary and duplicate are already in target status.
+        Assert.Empty(client.AppliedTransitions);
+    }
+
+    [Fact]
+    public async Task WhenDuplicatesClosedThenSummaryReportsCount()
+    {
+        var logger = new CapturingLogger();
+        var client = new StubClient();
+        client.IssueMap[1] = "PROJ-1";
+        client.ExtraIssues.Add((1, "PROJ-10"));
+        client.ExtraIssues.Add((1, "PROJ-20"));
+
+        var csv = WriteTempCsv(MakeCsv(MakeRow(1, status: "Open")));
+        var updater = new JiraUpdater(client, DefaultSettings(), logger);
+
+        await updater.RunAsync(csv, TempFile(), duplicateStatus: "Done");
+
+        Assert.True(logger.HasInformation("Duplicates closed: 2"));
     }
 }

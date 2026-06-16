@@ -97,7 +97,8 @@ maintained so interrupted runs can continue from where they left off.
 
 | Field | Condition |
 |---|---|
-| Status | When `updateStatus: true` in `map.json` — applied via workflow transition |
+| Duplicates | When `status.duplicate` is defined in `map.json` — duplicate Jira issues (same Bitbucket ID) are transitioned to the mapped status |
+| Status | When `updateStatus: true` in `map.json` — applied via workflow transition (skipped if already in target status) |
 | Comments | When `updateComments: true` — adds comments whose date is later than the latest existing Jira comment |
 | Comments (all) | When `updateComments: true` and `commentMode: "all"` — updates existing comments that differ and adds missing ones |
 
@@ -115,6 +116,31 @@ issue `description`:
 The Bitbucket issue number is extracted from the matched text and compared with the
 `Bitbucket Issue ID` column in `import.csv`. `bitbucketRepoUrl` is only required when
 `matchBy` is `url`.
+
+### Duplicate handling
+
+When multiple Jira issues are imported from the same Bitbucket issue (e.g. CT-1, CT-10,
+CT-20 all reference BB#43), Phase 1 detects them automatically:
+
+- The **first** issue found (by creation date) is considered the primary and is processed
+  normally according to the CSV row.
+- All subsequent issues with the same Bitbucket ID are **duplicates**.
+
+If the `status` section in `map.json` contains a `"duplicate"` key, duplicates are
+automatically transitioned to the mapped Jira status before Phase 2 begins. For example:
+
+```json
+"status": {
+  "duplicate": "Canceled",
+  ...
+}
+```
+
+In this case all duplicate issues will be transitioned to "Canceled". If a duplicate is
+already in the target status, it is skipped.
+
+If the `"duplicate"` key is absent from `map.status`, duplicates are logged as warnings
+but not modified.
 
 ### Comment format
 

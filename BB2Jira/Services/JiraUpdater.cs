@@ -41,9 +41,11 @@ public sealed class JiraUpdater
     /// Runs the full update cycle against <paramref name="csvPath"/>.
     /// Returns false when any error occurred (but processing continues on per-issue errors).
     /// </summary>
+    /// <param name="duplicateStatus">Jira status to assign to duplicate issues. Null or empty to skip.</param>
     public async Task<bool> RunAsync(
         string csvPath,
         string progressPath,
+        string? duplicateStatus = null,
         CancellationToken ct = default)
     {
         // Verify connectivity before doing any work.
@@ -55,14 +57,42 @@ public sealed class JiraUpdater
 
         // Phase 1: build Bitbucket ID → Jira key map.
         _logger.LogInformation("Phase 1: searching Jira project '{Project}' for imported issues…", _settings.ProjectKey);
-        var bbIdToJiraKey = await BuildBitbucketIdMapAsync(ct).ConfigureAwait(false);
+        var (bbIdToJiraKey, duplicateKeys) = await BuildBitbucketIdMapAsync(ct).ConfigureAwait(false);
         if (bbIdToJiraKey is null)
         {
             _logger.LogError("Phase 1 failed. Aborting.");
             return false;
         }
 
-        _logger.LogInformation("Phase 1 complete: {Count} issue(s) mapped.", bbIdToJiraKey.Count);
+        _logger.LogInformation("Phase 1 complete: {Count} issue(s) mapped, {Duplicates} duplicate(s) found.",
+            bbIdToJiraKey.Count, duplicateKeys.Count);
+
+        // Phase 1.5: close duplicate Jira issues.
+        var stats = new UpdateStats();
+        var hasErrors = false;
+
+        if (duplicateKeys.Count > 0 && !string.IsNullOrWhiteSpace(duplicateStatus))
+        {
+            _logger.LogInformation("Closing {Count} duplicate issue(s) with status '{Status}'…",
+                duplicateKeys.Count, duplicateStatus);
+
+            foreach (var dupKey in duplicateKeys)
+            {
+                ct.ThrowIfCancellationRequested();
+                var (ok, changed) = await TransitionToStatusAsync(dupKey, duplicateStatus, ct).ConfigureAwait(false);
+                if (ok)
+                {
+                    if (changed)
+                    {
+                        stats.DuplicatesClosed++;
+                    }
+                }
+                else
+                {
+                    hasErrors = true;
+                }
+            }
+        }
 
         // Load CSV rows (skip header).
         var rows = CsvValidator.ParseCsv(File.ReadAllText(csvPath, System.Text.Encoding.UTF8));
@@ -83,8 +113,6 @@ public sealed class JiraUpdater
 
         // Phase 2: process each CSV row.
         _logger.LogInformation("Phase 2: updating {Total} issue(s)…", dataRows.Count);
-        var stats = new UpdateStats();
-        var hasErrors = false;
 
         var watermarkBroken = false;
 
@@ -168,7 +196,7 @@ public sealed class JiraUpdater
     // Phase 1: build Bitbucket ID → Jira key map
     // -------------------------------------------------------------------------
 
-    private async Task<Dictionary<int, string>?> BuildBitbucketIdMapAsync(CancellationToken ct)
+    private async Task<(Dictionary<int, string>? Map, List<string> Duplicates)> BuildBitbucketIdMapAsync(CancellationToken ct)
     {
         // Phase 1 links a Bitbucket issue ID to a Jira key using one of two strategies,
         // controlled by the "matchBy" setting in map.json:
@@ -207,6 +235,7 @@ public sealed class JiraUpdater
         _logger.LogDebug("Phase 1 JQL (matchBy={Strategy}): {Jql}", _settings.MatchBy, jql);
 
         var map = new Dictionary<int, string>();
+        var duplicates = new List<string>();
         string? nextPageToken = null;
         const int pageSize = 100;
 
@@ -224,7 +253,7 @@ public sealed class JiraUpdater
                 _logger.LogError(
                     "Phase 1 search failed (nextPageToken={Token}): {Message}",
                     nextPageToken ?? "(first page)", ex.Message);
-                return null;
+                return (null, duplicates);
             }
 
             foreach (var issue in page.Issues)
@@ -235,8 +264,9 @@ public sealed class JiraUpdater
                     if (!map.TryAdd(bbId, issue.Key))
                     {
                         _logger.LogWarning(
-                            "Duplicate Bitbucket ID {BbId}: already mapped to {Existing}, ignoring {Duplicate}.",
+                            "Duplicate Bitbucket ID {BbId}: already mapped to {Existing}, marking {Duplicate} as duplicate.",
                             bbId, map[bbId], issue.Key);
+                        duplicates.Add(issue.Key);
                     }
                 }
             }
@@ -250,7 +280,7 @@ public sealed class JiraUpdater
             nextPageToken = page.NextPageToken;
         }
 
-        return map;
+        return (map, duplicates);
     }
 
     /// <summary>Removes the URL scheme (e.g. "https://") so the value is safe in a JQL phrase.</summary>
@@ -276,6 +306,35 @@ public sealed class JiraUpdater
             return (true, false);
         }
 
+        return await TransitionToStatusAsync(jiraKey, targetStatus, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Transitions a Jira issue to the specified status.
+    /// Returns (Ok, Changed): Ok is false on error; Changed is true when a transition was applied.
+    /// If the issue is already in the target status, returns (true, false).
+    /// </summary>
+    private async Task<(bool Ok, bool Changed)> TransitionToStatusAsync(
+        string jiraKey, string targetStatus, CancellationToken ct)
+    {
+        // Check if the issue is already in the target status.
+        string currentStatus;
+        try
+        {
+            currentStatus = await _client.GetCurrentStatusAsync(jiraKey, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException)
+        {
+            _logger.LogError("{JiraKey}: Failed to get current status: {Message}", jiraKey, ex.Message);
+            return (false, false);
+        }
+
+        if (currentStatus.Equals(targetStatus, StringComparison.Ordinal))
+        {
+            _logger.LogDebug("{JiraKey}: already in status '{Status}' — no transition needed.", jiraKey, targetStatus);
+            return (true, false);
+        }
+
         List<JiraTransition> transitions;
         try
         {
@@ -293,8 +352,8 @@ public sealed class JiraUpdater
         if (transition is null)
         {
             _logger.LogError(
-                "{JiraKey}: No transition to status '{Status}' is available. Available: {Available}",
-                jiraKey, targetStatus,
+                "{JiraKey}: No transition to status '{Status}' is available (current: '{Current}'). Available: {Available}",
+                jiraKey, targetStatus, currentStatus,
                 string.Join(", ", transitions.Select(t => $"'{t.Name}'")));
             return (false, false);
         }
@@ -568,6 +627,7 @@ public sealed class JiraUpdater
     {
         _logger.LogInformation("----- update summary -----");
         _logger.LogInformation("Processed: {Processed}", stats.Processed);
+        _logger.LogInformation("Duplicates closed: {DuplicatesClosed}", stats.DuplicatesClosed);
         _logger.LogInformation("Statuses updated: {StatusUpdated}", stats.StatusUpdated);
         _logger.LogInformation("Comments added: {CommentsAdded}", stats.CommentsAdded);
         _logger.LogInformation("Comments updated: {CommentsUpdated}", stats.CommentsUpdated);
@@ -578,12 +638,13 @@ public sealed class JiraUpdater
 
     private sealed class UpdateStats
     {
-        public int Processed       { get; set; }
-        public int Failed          { get; set; }
-        public int StatusUpdated   { get; set; }
-        public int CommentsAdded   { get; set; }
-        public int CommentsUpdated { get; set; }
-        public int NotFound        { get; set; }
-        public int Skipped         { get; set; }
+        public int Processed        { get; set; }
+        public int Failed           { get; set; }
+        public int DuplicatesClosed { get; set; }
+        public int StatusUpdated    { get; set; }
+        public int CommentsAdded    { get; set; }
+        public int CommentsUpdated  { get; set; }
+        public int NotFound         { get; set; }
+        public int Skipped          { get; set; }
     }
 }
